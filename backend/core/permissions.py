@@ -6,7 +6,8 @@ RBAC is server-side and deny-by-default.
 from __future__ import annotations
 
 import functools
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from core.errors import DomainError
 
@@ -36,9 +37,7 @@ def require_role(*roles: str) -> Callable[..., Any]:
             if user is None or not user.is_authenticated:
                 raise PermissionDenied("Authentication required.")
             if getattr(user, "role", None) not in roles:
-                raise PermissionDenied(
-                    f"Role '{user.role}' is not permitted. Required: {roles}"
-                )
+                raise PermissionDenied(f"Role '{user.role}' is not permitted. Required: {roles}")
             return func(request, *args, **kwargs)
 
         return wrapper

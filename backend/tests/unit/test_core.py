@@ -5,6 +5,7 @@ Requirement: Domain invariants (AGENTS.md Section 4).
 
 from decimal import Decimal
 from unittest.mock import MagicMock
+
 import pytest
 
 from core.audit import log_audit

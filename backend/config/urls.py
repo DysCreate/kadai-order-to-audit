@@ -1,8 +1,8 @@
 """URL configuration for Kadai backend."""
 
 from django.contrib import admin
-from django.urls import include, path
 from django.http import JsonResponse
+from django.urls import include, path
 
 
 def health(request):  # type: ignore[type-arg]
