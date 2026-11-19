@@ -8,7 +8,7 @@ All versions are pinned in `backend/requirements/base.txt` and `frontend/package
 |---------|---------|---------------|
 | Django | 5.2.1 | LTS web framework; session auth, ORM, migrations, admin. |
 | djangorestframework | 3.16.0 | REST API layer; serializers, viewsets, authentication. |
-| psycopg[binary] | 3.2.6 | psycopg 3 PostgreSQL adapter (binary wheels for speed). |
+| psycopg[binary] | 3.2.10 | psycopg 3 PostgreSQL adapter (binary wheels for speed). |
 | dj-database-url | 2.3.0 | Parses `DATABASE_URL` env var into Django `DATABASES` dict. |
 | django-cors-headers | 4.7.0 | CORS headers for the Vite dev server origin during development. |
 | WeasyPrint | 64.1 | HTML-to-PDF for GST invoices and reports (no headless browser). |
