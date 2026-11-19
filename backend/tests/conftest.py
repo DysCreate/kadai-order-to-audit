@@ -1,6 +1,5 @@
 """pytest configuration for Kadai backend tests."""
 
-import django
 import pytest
 
 

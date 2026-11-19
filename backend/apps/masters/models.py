@@ -66,7 +66,9 @@ class Customer(models.Model):
     name = models.CharField(max_length=200)
     gstin = models.CharField(max_length=15, blank=True)
     state_code = models.CharField(max_length=2)
-    customer_type = models.CharField(max_length=20, choices=CustomerType.choices, default=CustomerType.RETAILER)
+    customer_type = models.CharField(
+        max_length=20, choices=CustomerType.choices, default=CustomerType.RETAILER
+    )
     assigned_salesman = models.ForeignKey(
         "accounts.User",
         null=True,
