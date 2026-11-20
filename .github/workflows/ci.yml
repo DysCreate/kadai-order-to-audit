@@ -55,7 +55,7 @@ jobs:
           DATABASE_URL: postgresql://kadai:kadai_test@localhost:5432/kadai_test
 
       - name: Pytest
-        run: pytest --cov=core --cov-report=xml --cov-fail-under=80
+        run: pytest --cov=core --cov=apps --cov-report=xml --cov-fail-under=80
         env:
           DJANGO_SETTINGS_MODULE: config.settings.test
           DATABASE_URL: postgresql://kadai:kadai_test@localhost:5432/kadai_test

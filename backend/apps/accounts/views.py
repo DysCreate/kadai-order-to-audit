@@ -5,14 +5,19 @@ from typing import Any
 
 from django.contrib.auth import authenticate, login, logout
 from django.http import HttpRequest, JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
 
 @csrf_exempt
+@ensure_csrf_cookie
 @require_http_methods(["POST"])
 def login_view(request: HttpRequest) -> JsonResponse:
-    """POST /api/accounts/login/ – authenticate and open session."""
+    """POST /api/accounts/login/ – authenticate, open session, issue CSRF token.
+
+    Login itself is exempt (the SPA has no token yet), but the response sets the
+    csrftoken cookie so subsequent unsafe calls such as logout can present it.
+    """
     try:
         data: dict[str, Any] = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
@@ -31,7 +36,7 @@ def login_view(request: HttpRequest) -> JsonResponse:
             "user": {
                 "id": user.pk,
                 "username": user.username,
-                "role": user.role,  # type: ignore[attr-defined]
+                "role": user.role,
             }
         }
     )
@@ -55,7 +60,7 @@ def me_view(request: HttpRequest) -> JsonResponse:
             "user": {
                 "id": user.pk,
                 "username": user.username,
-                "role": user.role,  # type: ignore[attr-defined]
+                "role": user.role,
             }
         }
     )

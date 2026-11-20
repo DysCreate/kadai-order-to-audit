@@ -1,7 +1,8 @@
 """Domain errors for Kadai.
 
 All business-rule violations raise a subclass of DomainError.
-Views map these to the appropriate 4xx HTTP response with a machine-readable code.
+``core.api.domain_exception_handler`` maps these to 4xx responses with a
+machine-readable code.
 """
 
 
@@ -25,6 +26,24 @@ class InvalidUnit(DomainError):
     """Raised when a unit conversion is not defined or a unit is wrong."""
 
     code = "invalid_unit"
+
+
+class InvalidMovement(DomainError):
+    """Raised when a ledger movement violates the movement rules."""
+
+    code = "invalid_movement"
+
+
+class OpeningBalanceExists(DomainError):
+    """Raised when an opening balance is posted for an item that already moved."""
+
+    code = "opening_balance_exists"
+
+
+class PriceNotFound(DomainError):
+    """Raised when no price list line can resolve a price for an item."""
+
+    code = "price_not_found"
 
 
 class InvoiceImmutable(DomainError):

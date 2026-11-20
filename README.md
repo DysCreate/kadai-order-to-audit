@@ -57,13 +57,26 @@ Then open http://localhost:3000
 | Feature | Status |
 |---------|--------|
 | Project scaffold | ✅ Phase 0 |
-| Inventory ledger | 🚧 Phase 1 |
+| Masters, units, ledger, stock API | ✅ Phase 1 |
 | Production runs | 🚧 Phase 2 |
 | Sales & invoicing | 🚧 Phase 3 |
 | Costing | 🚧 Phase 4 |
 | Reports | 🚧 Phase 5 |
 | Leakage Radar | 🚧 Phase 6 |
 | Offline PWA | 🚧 Phase 7 |
+
+## Phase 1 Inventory API
+
+| Method | Path | Allowed roles |
+|--------|------|---------------|
+| GET | `/api/inventory/stock/` | all five roles |
+| GET | `/api/inventory/ledger/?item=&date_from=&date_to=` | admin, production, accountant, owner |
+| POST | `/api/inventory/adjustments/` | admin, production, owner |
+
+The stock ledger is append-only (a PostgreSQL trigger rejects UPDATE and DELETE).
+Opening balances are `OPENING` ledger rows, so the stock summary is literally a
+sum over the ledger. `make seed` loads the Appendix A opening stock and
+`make reconcile` proves every balance equals its ledger sum.
 
 ## Assumptions
 

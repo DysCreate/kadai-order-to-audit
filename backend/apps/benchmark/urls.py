@@ -1,5 +1,3 @@
-"""Benchmark URL configuration."""
+"""URL configuration – endpoints are added in their phase."""
 
-from django.urls import path
-
-urlpatterns: list = []
+urlpatterns: list[object] = []

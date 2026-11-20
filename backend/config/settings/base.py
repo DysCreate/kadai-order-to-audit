@@ -142,6 +142,7 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.JSONRenderer",
     ],
     "COERCE_DECIMAL_TO_STRING": True,
+    "EXCEPTION_HANDLER": "core.api.domain_exception_handler",
 }
 
 # ---------------------------------------------------------------------------
