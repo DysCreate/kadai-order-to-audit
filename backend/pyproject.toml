@@ -1,0 +1,23 @@
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Generated migrations are never edited by hand; formatting them would rewrite
+# applied history. They are still checked for correctness by the test suite.
+extend-exclude = ["**/migrations/*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["mypy_django_plugin.main"]
+
+# DRF ships no type stubs; views and serializers subclass Any. Business logic
+# in services.py and core/ stays under strict checking.
+[[tool.mypy.overrides]]
+module = ["apps.*.views", "apps.*.serializers"]
+disallow_subclassing_any = false
+
+[tool.django-stubs]
+django_settings_module = "config.settings.development"

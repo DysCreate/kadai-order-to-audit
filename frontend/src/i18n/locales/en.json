@@ -1,0 +1,69 @@
+{
+  "login": {
+    "title": "Sign In",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Sign In",
+    "error": "Invalid credentials"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "production": "Production",
+    "logout": "Sign Out",
+    "welcome": "Welcome to Kadai order-to-audit system."
+  },
+  "production": {
+    "title": "Production runs",
+    "subtitle": "Plan, issue and complete batches. Variance is flagged beyond the tolerance.",
+    "loading": "Loading…",
+    "loadError": "Could not load production runs.",
+    "empty": "No production runs yet.",
+    "runLabel": "Run #{{id}}",
+    "batches": "{{batches}} batch(es)",
+    "plannedOutput": "planned {{qty}} packets",
+    "plan": "Plan: {{qty}} {{uom}}",
+    "bomVersion": "BOM v{{version}}",
+    "tolerance": "tolerance {{pct}}",
+    "states": {
+      "DRAFT": "Draft",
+      "ISSUED": "Issued",
+      "COMPLETED": "Completed"
+    },
+    "issue": {
+      "title": "Issue materials",
+      "hint": "Enter what actually left the store. Packaging is consumed at packing.",
+      "issuedQty": "Issued quantity",
+      "submit": "Issue materials",
+      "error": "Could not issue materials."
+    },
+    "complete": {
+      "title": "Complete run",
+      "hint": "Record the packing result; the finished-goods receipt follows automatically.",
+      "goodPackets": "Good packets",
+      "damagedPouches": "Damaged pouches",
+      "cartonsUsed": "Cartons used",
+      "submit": "Complete run",
+      "error": "Could not complete the run."
+    },
+    "amend": {
+      "title": "Amend an issued run",
+      "hint": "The issues are reversed at their original cost and the run returns to draft.",
+      "reason": "Reason",
+      "submit": "Amend",
+      "error": "Could not amend the run."
+    },
+    "variance": {
+      "title": "Variance",
+      "input": "Input",
+      "planned": "Planned",
+      "actual": "Actual",
+      "variance": "Variance",
+      "favourable": "favourable",
+      "adverse": "adverse",
+      "none": "on plan",
+      "yieldHint": "Plan: {{qty}} good packets",
+      "pouchHint": "Plan: {{qty}} pouches",
+      "cartonHint": "Plan: {{qty}} cartons"
+    }
+  }
+}

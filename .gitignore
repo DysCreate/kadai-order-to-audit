@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Environment
+.env
+*.env.local
+
+# Node
+node_modules/
+dist/
+.pnp
+.pnp.js
+*.local
+
+# Docker / local volumes
+postgres_data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Misc
+*.log
+*.pot
+*.pyc
+
+# Evidence screenshots (keep the dir via .gitkeep)
+docs/evidence/*.png
+docs/evidence/*.jpg
+
+# Never ignore
+!.env.example
+!docs/evidence/.gitkeep
