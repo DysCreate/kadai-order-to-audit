@@ -9,6 +9,8 @@ from unittest.mock import MagicMock
 import pytest
 from rest_framework.exceptions import PermissionDenied as DRFPermissionDenied
 
+from apps.accounts.services import create_user
+from apps.audit.models import AuditLog
 from core.api import domain_exception_handler
 from core.audit import log_audit
 from core.errors import (
@@ -139,10 +141,25 @@ def test_domain_exception_handler_maps_errors() -> None:
     assert domain_exception_handler(ValueError("not a domain error"), {}) is None
 
 
-def test_audit_log_stub() -> None:
-    """log_audit stub executes without crashing."""
-    user = MagicMock()
-    log_audit(user, "Order", 1, "create", {}, {"id": 1})
+@pytest.mark.django_db
+def test_audit_log_writes_a_json_safe_row() -> None:
+    """PS 4.10: log_audit writes a real row and stores Decimals as strings."""
+    user = create_user(username="auditor", password="test-pass", role="admin")
+
+    log_audit(
+        user,
+        "ProductionRun",
+        7,
+        "amend",
+        {"issued_qty": Decimal("1.000")},
+        {"issued_qty": Decimal("2.000")},
+    )
+
+    row = AuditLog.objects.get(entity="ProductionRun", entity_id=7)
+    assert row.user == user
+    assert row.action == "amend"
+    assert row.before == {"issued_qty": "1.000"}
+    assert row.after == {"issued_qty": "2.000"}
 
 
 def test_role_permission_is_deny_by_default() -> None:

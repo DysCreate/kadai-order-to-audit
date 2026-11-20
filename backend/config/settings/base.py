@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "corsheaders",
     # Project apps
     "apps.accounts",
+    "apps.audit",
     "apps.masters",
     "apps.inventory",
     "apps.production",

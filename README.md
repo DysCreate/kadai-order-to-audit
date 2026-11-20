@@ -58,7 +58,7 @@ Then open http://localhost:3000
 |---------|--------|
 | Project scaffold | ✅ Phase 0 |
 | Masters, units, ledger, stock API | ✅ Phase 1 |
-| Production runs | 🚧 Phase 2 |
+| Production loop (BOM, purchases, runs, variance, amend) | ✅ Phase 2 |
 | Sales & invoicing | 🚧 Phase 3 |
 | Costing | 🚧 Phase 4 |
 | Reports | 🚧 Phase 5 |
@@ -78,10 +78,58 @@ Opening balances are `OPENING` ledger rows, so the stock summary is literally a
 sum over the ledger. `make seed` loads the Appendix A opening stock and
 `make reconcile` proves every balance equals its ledger sum.
 
+## Phase 2 Production API
+
+| Method | Path | Allowed roles |
+|--------|------|---------------|
+| GET | `/api/production/boms/?product=` | production, admin, accountant, owner |
+| POST | `/api/production/boms/` | production, admin, owner |
+| GET | `/api/production/runs/?product=` | production, admin, accountant, owner |
+| POST | `/api/production/runs/` | production, admin, owner |
+| GET | `/api/production/runs/<id>/` | production, admin, accountant, owner |
+| POST | `/api/production/runs/<id>/issue/` | production, admin, owner |
+| POST | `/api/production/runs/<id>/complete/` | production, admin, owner |
+| POST | `/api/production/runs/<id>/amend/` | production, admin, owner |
+| POST | `/api/inventory/purchases/` | production, admin, owner |
+
+The run screen lives at `/production` in the web app (tablet-sized numeric
+inputs, live variance chips, stored variance table once completed).
+
+## Production loop
+
+A purchase posts one `RECEIPT` row per line and updates the moving weighted
+average. A run moves `DRAFT → ISSUED → COMPLETED`: issuing posts one `ISSUE`
+row per raw material, completing records the packing result, posts the derived
+pouch and carton issues plus the finished-goods `RECEIPT`, and stores a
+variance snapshot (one row per input plus the yield). Every transition writes
+an `audit_log` row in the same transaction.
+
 ## Assumptions
 
 See [DESIGN.md](docs/DESIGN.md) for full assumptions and design decisions.
+Phase 2 adds these readings of Appendix A:
+
+1. **Packaging is consumed at packing, not pre-issued.** Step 2 issues raw
+   materials only; step 3 derives pouches (`good + damaged`) and cartons
+   (`cartons used`). This is what makes the pouch line 194 against a plan of
+   200, and it needs no reversal to reach the 306 and 21 closings.
+2. **Issued but unused stock is returned at its issue value.** If a supervisor
+   issues the full plan and uses less, completion posts a `RECEIPT` for the
+   difference at the original weighted-average value. Raw-material actual
+   usage equals what was issued; leftovers are a stock adjustment.
+3. **A completed run is a closed cost document.** `amend` is accepted only
+   while a run is `ISSUED`: it reverses every issue at its original value,
+   returns the run to `DRAFT` and is audited. Correcting a completed run is a
+   later-phase reversal document.
+4. **The finished-goods receipt is valued at the run's net material cost**, so
+   scrap is absorbed by good packets (assumption A5). Overheads are Phase 4
+   and will post a value-only adjustment to the run.
 
 ## Benchmark Results
 
-Run `make benchmark` after `make seed`. All expected values from AGENTS.md Appendix A.
+`tests/benchmark/test_benchmark_end_to_end.py` replays Appendix A steps 1-3
+through the same services the API uses and asserts every closing (flour 120 kg,
+oil 19.5 L, spice mix 3.8 kg, pouches 306, cartons 21, FG 238), the 4,055.00
+material cost of the 188-packet receipt, and the variance flags (yield -6% and
+oil +5% flagged, pouch -3% not flagged, carton -10% favourable). All pass.
+`make benchmark` (the Benchmark Console of Phase 6) is not implemented yet.

@@ -12,4 +12,5 @@ urlpatterns = [
         views.StockAdjustmentView.as_view(),
         name="inventory-adjustment-create",
     ),
+    path("purchases/", views.PurchaseCreateView.as_view(), name="inventory-purchase-create"),
 ]

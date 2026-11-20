@@ -18,15 +18,18 @@ from decimal import Decimal, InvalidOperation
 
 from django.db import IntegrityError, transaction
 from django.db.models import QuerySet, Sum
+from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.masters.models import Item
+from apps.masters.models import Item, Supplier
 from core.errors import DomainError, InvalidMovement, OpeningBalanceExists
 from core.money import q2, q4
 from core.quantity import q3
 
 from .models import (
     MovementType,
+    Purchase,
+    PurchaseLine,
     SourceType,
     StockAdjustment,
     StockBalance,
@@ -41,11 +44,26 @@ _INCOMING_TYPES = frozenset({MovementType.OPENING, MovementType.RECEIPT})
 
 @dataclass(frozen=True)
 class Movement:
-    """One requested stock movement, before valuation and persistence."""
+    """One requested stock movement, before valuation and persistence.
+
+    ``unit_cost`` values a receipt at a rate. ``value`` states the exact total
+    to add or remove, and is used by reversal paths (for example returning a
+    production run's issues at the value they were taken at).
+    """
 
     item_id: int
     qty: Decimal
     unit_cost: Decimal | None = None
+    value: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class PurchaseLineInput:
+    """One item received on a purchase, before the purchase is posted."""
+
+    item_id: int
+    qty: Decimal
+    unit_cost: Decimal
 
 
 @dataclass(frozen=True)
@@ -154,6 +172,14 @@ def post_movements(
             if unit_cost < 0:
                 raise InvalidMovement("A unit cost cannot be negative.")
 
+        explicit_value: Decimal | None = None
+        if movement.value is not None:
+            explicit_value = _as_decimal(movement.value, "value")
+            if explicit_value <= 0:
+                raise InvalidMovement("An explicit movement value must be positive.")
+            if unit_cost is not None:
+                raise InvalidMovement("Supply either a unit cost or an exact value, not both.")
+
         if movement_type in _INCOMING_TYPES and qty < 0:
             raise InvalidMovement(f"{movement_type} movements must increase stock.")
         if (
@@ -164,10 +190,19 @@ def post_movements(
             raise InvalidMovement("Issue value is derived, not supplied.")
         if movement_type == MovementType.ISSUE and qty > 0:
             raise InvalidMovement("ISSUE movements must decrease stock.")
-        if movement_type in _INCOMING_TYPES and unit_cost is None:
+        if explicit_value is not None and movement_type not in _INCOMING_TYPES:
+            raise InvalidMovement("Only incoming movements may state an exact value.")
+        if movement_type in _INCOMING_TYPES and unit_cost is None and explicit_value is None:
             raise InvalidMovement(f"{movement_type} movements require a unit cost.")
 
-        normalized.append(Movement(item_id=movement.item_id, qty=qty, unit_cost=unit_cost))
+        normalized.append(
+            Movement(
+                item_id=movement.item_id,
+                qty=qty,
+                unit_cost=unit_cost,
+                value=explicit_value,
+            )
+        )
 
     item_ids = sorted({movement.item_id for movement in normalized})
     _validate_items(item_ids)
@@ -183,7 +218,12 @@ def post_movements(
         for movement in grouped[item_id]:
             qty = movement.qty
             if qty > 0:
-                if movement.unit_cost is not None:
+                if movement.value is not None:
+                    # Reversal path: the exact value is known, so derive the
+                    # unit value instead of recomputing it from a rate.
+                    value = q2(movement.value)
+                    unit_cost = q4(value / qty)
+                elif movement.unit_cost is not None:
                     unit_cost = q4(movement.unit_cost)
                 elif balance.qty > 0:
                     unit_cost = balance.value / balance.qty
@@ -191,7 +231,8 @@ def post_movements(
                     raise InvalidMovement(
                         "A unit cost is required to increase an empty stock balance."
                     )
-                value = VALUATION.receipt_value(qty, unit_cost)
+                if movement.value is None:
+                    value = VALUATION.receipt_value(qty, unit_cost)
             else:
                 issue_qty = -qty
                 value = -VALUATION.issue_value(issue_qty, balance.qty, balance.value)
@@ -233,6 +274,7 @@ def post_movement(
     source_type: str,
     source_id: int,
     unit_cost: Decimal | str | int | None = None,
+    value: Decimal | str | int | None = None,
     user: User | None = None,
     batch_id: str | None = None,
 ) -> StockLedger:
@@ -243,6 +285,7 @@ def post_movement(
                 item_id=item_id,
                 qty=_as_decimal(qty, "qty"),
                 unit_cost=None if unit_cost is None else _as_decimal(unit_cost, "unit_cost"),
+                value=None if value is None else _as_decimal(value, "value"),
             )
         ],
         movement_type=movement_type,
@@ -328,6 +371,68 @@ def adjust_stock(
         user=user,
     )
     return adjustment
+
+
+@transaction.atomic
+def create_purchase(
+    *,
+    supplier: Supplier,
+    lines: list[PurchaseLineInput],
+    user: User | None = None,
+    reference: str = "",
+    purchase_date: date | None = None,
+    notes: str = "",
+) -> Purchase:
+    """Record a purchase and post one RECEIPT ledger row per line.
+
+    Invariants: every line has a positive quantity, a non-negative rate and an
+    existing item; the purchase total is the sum of ``q2(qty * rate)``; all
+    receipts post in one transaction, so a bad line posts nothing and the
+    weighted average is updated exactly once per receipt.
+    """
+    if not lines:
+        raise InvalidMovement("A purchase needs at least one line.")
+
+    purchase = Purchase.objects.create(
+        supplier=supplier,
+        reference=reference.strip(),
+        purchase_date=purchase_date or timezone.localdate(),
+        notes=notes.strip(),
+        created_by=user,
+    )
+
+    movements: list[Movement] = []
+    total = Decimal("0.00")
+    for line in lines:
+        qty = q3(_as_decimal(line.qty, "qty"))
+        if qty <= 0:
+            raise InvalidMovement("A purchase quantity must be greater than zero.")
+        unit_cost = q4(_as_decimal(line.unit_cost, "unit_cost"))
+        if unit_cost < 0:
+            raise InvalidMovement("A purchase rate cannot be negative.")
+
+        value = q2(qty * unit_cost)
+        PurchaseLine.objects.create(
+            purchase=purchase,
+            item_id=line.item_id,
+            qty=qty,
+            unit_cost=unit_cost,
+            value=value,
+        )
+        movements.append(Movement(item_id=line.item_id, qty=qty, unit_cost=unit_cost))
+        total += value
+
+    purchase.total_value = q2(total)
+    purchase.save(update_fields=["total_value"])
+
+    post_movements(
+        movements=movements,
+        movement_type=MovementType.RECEIPT,
+        source_type=SourceType.PURCHASE,
+        source_id=purchase.pk,
+        user=user,
+    )
+    return purchase
 
 
 def stock_summary() -> list[StockSummaryRow]:

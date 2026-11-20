@@ -16,13 +16,21 @@ from apps.accounts.models import Role
 from core.permissions import RolePermission
 
 from .serializers import (
+    PurchaseInputSerializer,
+    PurchaseSerializer,
     StockAdjustmentInputSerializer,
     StockAdjustmentSerializer,
     StockLedgerEntrySerializer,
     StockLedgerQuerySerializer,
     StockSummaryRowSerializer,
 )
-from .services import adjust_stock, ledger_entries, stock_summary
+from .services import (
+    PurchaseLineInput,
+    adjust_stock,
+    create_purchase,
+    ledger_entries,
+    stock_summary,
+)
 
 
 class InventoryAPIView(APIView):
@@ -55,6 +63,32 @@ class StockLedgerView(InventoryAPIView):
             date_to=query.validated_data.get("date_to"),
         )
         return Response(StockLedgerEntrySerializer(entries, many=True).data)
+
+
+class PurchaseCreateView(InventoryAPIView):
+    """POST /api/inventory/purchases/ – receive goods and post RECEIPT rows."""
+
+    allowed_roles = (Role.ADMIN, Role.PRODUCTION, Role.OWNER)
+
+    def post(self, request: Request) -> Response:
+        serializer = PurchaseInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        purchase = create_purchase(
+            supplier=serializer.validated_data["supplier"],
+            reference=serializer.validated_data.get("reference", ""),
+            purchase_date=serializer.validated_data.get("purchase_date"),
+            notes=serializer.validated_data.get("notes", ""),
+            lines=[
+                PurchaseLineInput(
+                    item_id=line["item"].pk,
+                    qty=line["qty"],
+                    unit_cost=line["unit_cost"],
+                )
+                for line in serializer.validated_data["lines"]
+            ],
+            user=request.user,
+        )
+        return Response(PurchaseSerializer(purchase).data, status=201)
 
 
 class StockAdjustmentView(InventoryAPIView):

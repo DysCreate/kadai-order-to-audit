@@ -58,6 +58,12 @@ class BOMVersionMismatch(DomainError):
     code = "bom_version_mismatch"
 
 
+class InvalidRunState(DomainError):
+    """Raised when a production run is asked to make an illegal transition."""
+
+    code = "invalid_run_state"
+
+
 class DuplicateOrder(DomainError):
     """Raised when a client UUID is reused for a new order."""
 

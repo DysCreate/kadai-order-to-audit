@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from .models import StockAdjustment, StockBalance, StockLedger
+from .models import Purchase, PurchaseLine, StockAdjustment, StockBalance, StockLedger
 
 
 @admin.register(StockLedger)
@@ -52,6 +52,22 @@ class StockAdjustmentAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
 
     def has_add_permission(self, request: object) -> bool:
         return False
+
+    def has_delete_permission(self, request: object, obj: object = None) -> bool:
+        return False
+
+
+class PurchaseLineInline(admin.TabularInline):  # type: ignore[type-arg]
+    model = PurchaseLine
+    extra = 0
+    readonly_fields = ("item", "qty", "unit_cost", "value")
+
+
+@admin.register(Purchase)
+class PurchaseAdmin(admin.ModelAdmin):  # type: ignore[type-arg]
+    list_display = ("id", "supplier", "reference", "purchase_date", "total_value", "created_at")
+    list_filter = ("supplier",)
+    inlines = (PurchaseLineInline,)
 
     def has_delete_permission(self, request: object, obj: object = None) -> bool:
         return False

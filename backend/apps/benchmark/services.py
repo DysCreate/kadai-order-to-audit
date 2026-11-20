@@ -33,6 +33,8 @@ from apps.masters.services import (
     ensure_default_settings,
     set_price,
 )
+from apps.production.models import BOM
+from apps.production.services import BOMLineInput, create_bom_version
 
 UOMS: tuple[tuple[str, str], ...] = (
     ("Kilogram", "kg"),
@@ -79,6 +81,18 @@ OPENING_STOCK: tuple[tuple[str, Decimal, Decimal], ...] = (
 CUSTOMER_PRICE_LIST_NAME = "Standard 2026-27"
 SELLING_PRICE = Decimal("50.00")
 
+# Appendix A BOM for Murukku 200 g: one batch is 40 kg of bulk product, packed
+# into 200 packets of 200 g. Roles mark the pouch and carton lines, whose
+# consumption is derived from the packing record at run completion.
+BOM_BATCH_OUTPUT_QTY = Decimal("200")
+BOM_LINES: tuple[tuple[str, Decimal, str], ...] = (
+    ("Flour", Decimal("40"), "material"),
+    ("Cooking oil", Decimal("10"), "material"),
+    ("Salt and spice mix", Decimal("1.2"), "material"),
+    ("200 g pouch", Decimal("200"), "pouch"),
+    ("Carton (holds 20 packets)", Decimal("10"), "carton"),
+)
+
 SUPPLIER = ("Sri Lakshmi Flour Mills", "33AABCS1234F1Z5")
 
 CUSTOMERS: tuple[tuple[str, str, str, str, str], ...] = (
@@ -91,6 +105,14 @@ FINISHED_GOODS_NAME = "Murukku 200 g"
 
 # Tables wiped by --reset. CASCADE covers join tables (user -> customer).
 BUSINESS_TABLES: tuple[str, ...] = (
+    "production_run_variance_snapshot",
+    "production_run_line",
+    "production_run",
+    "production_bom_line",
+    "production_bom",
+    "inventory_purchase_line",
+    "inventory_purchase",
+    "audit_log",
     "inventory_stock_ledger",
     "inventory_stock_balance",
     "inventory_stock_adjustment",
@@ -116,6 +138,7 @@ class SeedReport:
     customers: int
     opening_balances: int
     uoms: int
+    bom_versions: int = 0
 
 
 def reset_benchmark_data() -> None:
@@ -191,6 +214,22 @@ def seed_benchmark(*, reset: bool = False) -> SeedReport:
     add_item_conversion(item=finished_goods, uom_symbol="ctn", factor=Decimal("20"))
     set_price(price_list=price_list, item=finished_goods, price=SELLING_PRICE)
 
+    bom_versions = 0
+    if not BOM.objects.filter(product=finished_goods).exists():
+        create_bom_version(
+            product=finished_goods,
+            batch_output_qty=BOM_BATCH_OUTPUT_QTY,
+            lines=[
+                BOMLineInput(
+                    item_id=Item.objects.get(name=item_name).pk,
+                    qty_per_batch=qty,
+                    role=role,
+                )
+                for item_name, qty, role in BOM_LINES
+            ],
+        )
+        bom_versions = 1
+
     customers = 0
     for name, state_code, customer_type, gstin, salesman_username in CUSTOMERS:
         create_customer(
@@ -216,6 +255,7 @@ def seed_benchmark(*, reset: bool = False) -> SeedReport:
         customers=customers,
         opening_balances=opening_balances,
         uoms=len(UOMS),
+        bom_versions=bom_versions,
     )
 
 

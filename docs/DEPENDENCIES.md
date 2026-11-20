@@ -6,12 +6,12 @@ All versions are pinned in `backend/requirements/base.txt` and `frontend/package
 
 | Package | Version | Justification |
 |---------|---------|---------------|
-| Django | 5.2.1 | LTS web framework; session auth, ORM, migrations, admin. |
-| djangorestframework | 3.16.0 | REST API layer; serializers, viewsets, authentication. |
+| Django | 5.2.17 | LTS web framework; session auth, ORM, migrations, admin. Latest 5.2 patch (security releases up to 5.2.17). |
+| djangorestframework | 3.18.2 | REST API layer; serializers, viewsets, authentication. Security release (CVE-2026-114136/7/8). |
 | psycopg[binary] | 3.2.10 | psycopg 3 PostgreSQL adapter (binary wheels for speed). |
 | dj-database-url | 2.3.0 | Parses `DATABASE_URL` env var into Django `DATABASES` dict. |
 | django-cors-headers | 4.7.0 | CORS headers for the Vite dev server origin during development. |
-| WeasyPrint | 64.1 | HTML-to-PDF for GST invoices and reports (no headless browser). |
+| WeasyPrint | 70.0 | HTML-to-PDF for GST invoices and reports (no headless browser). Security release: 64.1 carried six advisories (PYSEC-2026-2034/3412/3940/4311). |
 | openpyxl | 3.1.5 | Excel export for monthly reports. |
 
 ## Backend (dev / test only — not in base.txt)
