@@ -149,6 +149,126 @@ Invoice total                       = 6,300.00
 
 ---
 
+## Sales Loop
+
+### Order lifecycle
+
+```
+SUBMITTED ──approve──► APPROVED ──invoice──► INVOICED ──dispatch──► DISPATCHED
+     └─────reject────► REJECTED
+```
+
+- `POST /api/sales/orders/` is idempotent per device-generated `client_uuid`.
+  A retry with the same customer and salesman returns the existing order.
+- The salesman's price is resolved from the customer's price list, then the
+  default list, and snapshotted on the order line. A later price-list change
+  never rewrites an existing order or invoice.
+- A salesman may only order for a customer assigned to them; the check is in
+  the service, so the API refuses even if the UI is bypassed.
+- Admin verification may edit a line's quantity or price while the order is
+  `SUBMITTED`; the edit writes a before/after `audit_log` row.
+- Stock coverage per line = on-hand − commitments to other approved orders and
+  undispatched invoices. Approval does not block on a shortage (the admin may
+  hold for production); dispatch is the hard gate.
+
+### GST invoice
+
+- Place of supply = customer state vs factory state (`33` from settings).
+- Same state: CGST and SGST at half the item's rate each. Different: IGST.
+- Each line's taxable value and tax are rounded once to paise with
+  `q2()`/ROUND_HALF_UP. The invoice total is exactly `taxable + tax`; the
+  `round_off` column reports the accumulated per-line rounding as a memo.
+- Numbering: `INV/26-27/00001`, from a per-financial-year counter row locked
+  with `SELECT … FOR UPDATE`. The financial year starts 1 April and is computed
+  in `Asia/Kolkata`. Credit notes use `CN/26-27/00001`; orders use `ORD/…`.
+- A posted invoice and its lines are immutable: migration `sales/0002` installs
+  a trigger that rejects UPDATE and DELETE.
+- The PDF is rendered by WeasyPrint from `sales/invoice.html`. A shared link is
+  a Django-signed invoice id with a seven-day expiry, so the customer needs no
+  session. WhatsApp and mailto links wrap that URL.
+
+### Dispatch and credit notes
+
+- Dispatch is append-only: `Dispatch` + `DispatchLine`, then finished-goods
+  `ISSUE` ledger rows sourced to the dispatch. Dispatched and credited
+  quantities are derived by summing those lines, so the invoice is untouched.
+- A partial dispatch leaves the order `INVOICED`; the order becomes
+  `DISPATCHED` only when every invoice line is fully dispatched or credited.
+- A credit note carries its own tax split and number series. Crediting every
+  line makes the invoice count as cancelled (derived, never stored). Restock is
+  optional and posts a finished-goods `RECEIPT` sourced to the credit note at
+  the current weighted-average cost.
+
+### Payments and ageing
+
+- A payment is positive and may be partly unallocated (an advance).
+- Allocations are unique per (payment, invoice), locked while checked, and can
+  never exceed the invoice's outstanding balance. A cancelled invoice cannot
+  receive money.
+- `outstanding = invoice total − credit notes − allocations`.
+- Ageing buckets the outstanding balance by invoice date: 0–30, 31–60, 61–90,
+  90+ days. The customer ledger returns invoices, payments, outstanding and the
+  buckets in one result.
+
+---
+
+## Costing
+
+### Run and monthly overheads
+
+`costing_overhead_entry` carries either a `RUN` scope with a production-run
+foreign key or a `MONTH` scope with a first-of-month `period`; a database check
+constraint enforces exactly one owner. Amounts are positive NUMERIC(14,2).
+
+A run overhead is accepted only for a `COMPLETED` run. It is assigned fully to
+that run and reaches finished-goods value through
+`inventory.services.post_value_adjustment`: an append-only `ADJUSTMENT` ledger
+row with `qty = 0` and a positive value, posted under the balance-row lock. The
+balance keeps its packet count and gains the overhead value, so the ledger and
+balance still reconcile. A zero-quantity FG balance is refused rather than
+carrying value with no stock.
+
+### Monthly pool allocation
+
+A monthly pool is allocated once per entry across the runs completed in that
+calendar month in `Asia/Kolkata`. Each run's weight is
+`batches × product.standard_batch_hours` (default one hour per batch). The split
+uses a largest-remainder calculation in paise, so the shares sum exactly to the
+entry and no rupee is lost. `costing_overhead_allocation` is unique per
+(entry, run), and re-running the allocation returns the existing rows without
+posting a second value adjustment.
+
+### Cost sheet
+
+For a completed run:
+
+```
+materials = net value of the run's input ledger rows (issues minus returns)
+overheads = run overheads + monthly allocations
+total = materials + overheads
+cost per good packet = total / good packets
+margin = default selling price - cost per good packet
+```
+
+The cost sheet also reports the current FG balance and its weighted-average
+cost. That stock cost can differ from the run cost because opening FG was
+valued at standard material cost, dispatches remove value at the running
+average, and overheads are added after the FG receipt. Both views are shown
+rather than forcing one to equal the other.
+
+### Valuation methods (reference only)
+
+The chosen method is moving weighted average. The other columns document what
+the benchmark would show under alternatives; they are not implemented.
+
+| Method | Flour cost | Run total | Per packet | Margin at ₹50 |
+| --- | --- | --- | --- | --- |
+| Weighted average (chosen) | 1,725.00 | 5,855.00 | 31.14 | 18.86 (37.7%) |
+| FIFO | 1,680.00 | 5,810.00 | 30.90 | 19.10 (38.2%) |
+| Last price | 1,800.00 | 5,930.00 | 31.54 | 18.46 (36.9%) |
+
+---
+
 ## Assumptions (from Appendix A)
 
 | # | Assumption |
@@ -162,6 +282,16 @@ Invoice total                       = 6,300.00
 | A7 | Loop Closer trailing yield factor = 0.94 (188 / 200). |
 | A8 | Financial year starts 1 April; all timestamps stored in UTC, displayed in Asia/Kolkata. |
 | A9 | Factory state: Tamil Nadu (code 33). |
+| A10 | Approval does not block on stock; dispatch is the hard gate, so an order can be held for production. |
+| A11 | Invoice cancellation is derived from credit notes covering every line; invoices are never updated. |
+| A12 | Round-off is a memo of per-line paise rounding; the total always equals taxable + tax. |
+| A13 | Credit-note restock is valued at the current weighted-average cost (zero when stock is empty). |
+| A14 | Payments are explicitly allocated; unallocated money is an advance. Ageing buckets by invoice date. |
+| A15 | Shared invoice PDF links are signed and expire after seven days. |
+| A16 | Run overheads apply only to completed runs and post a value-only (`qty = 0`) ledger row; a zero FG balance is refused. |
+| A17 | Monthly pools are allocated by `batches × standard_batch_hours` across completed runs in the Asia/Kolkata month, using a largest-remainder paise split; allocation is idempotent per entry and run. |
+| A18 | Cost per good packet = (net materials + overheads) / good packets. FG weighted-average cost is a separate current-stock view. |
+| A19 | Margin uses the default selling price; when no price is configured the margin is null. |
 
 ---
 
@@ -172,8 +302,8 @@ Roles are enforced server-side, deny-by-default:
 | Role | Can do |
 |------|--------|
 | salesman | Create/view own orders and assigned customers only |
-| admin | Approve orders, raise invoices, dispatch, view all |
-| production | Create/complete production runs, view BOM |
+| admin | Approve orders, raise invoices, dispatch, allocate monthly overheads, view all |
+| production | Create/complete production runs, view BOM, record run and monthly overheads |
 | accountant | Read-only across all modules |
 | owner | Full access |
 

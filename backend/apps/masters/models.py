@@ -80,6 +80,13 @@ class Item(models.Model):
         validators=[MinValueValidator(Decimal("0"))],
         help_text="GST rate as a percentage, e.g. 5.00 for 5%.",
     )
+    standard_batch_hours = models.DecimalField(
+        max_digits=8,
+        decimal_places=3,
+        default=Decimal("1.000"),
+        validators=[MinValueValidator(Decimal("0.001"))],
+        help_text="Standard batch-hours per batch, used to allocate monthly overheads.",
+    )
 
     class Meta:
         db_table = "masters_item"
@@ -88,6 +95,10 @@ class Item(models.Model):
             models.CheckConstraint(
                 check=models.Q(gst_rate__gte=0),
                 name="chk_item_gst_rate_non_negative",
+            ),
+            models.CheckConstraint(
+                check=models.Q(standard_batch_hours__gt=0),
+                name="chk_item_standard_batch_hours_positive",
             ),
         ]
 

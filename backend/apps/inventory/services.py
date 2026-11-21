@@ -22,7 +22,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.masters.models import Item, Supplier
-from core.errors import DomainError, InvalidMovement, OpeningBalanceExists
+from core.errors import DomainError, InsufficientStock, InvalidMovement, OpeningBalanceExists
 from core.money import q2, q4
 from core.quantity import q3
 
@@ -295,6 +295,54 @@ def post_movement(
         batch_id=batch_id,
     )
     return entries[0]
+
+
+@transaction.atomic
+def post_value_adjustment(
+    *,
+    item_id: int,
+    value: Decimal | str | int,
+    source_type: str,
+    source_id: int,
+    user: User | None = None,
+) -> StockLedger:
+    """Add value to an existing stock balance without changing its quantity.
+
+    Used by costing to absorb overheads into finished goods after the run's
+    material receipt. Invariants: the amount is a positive Decimal, the item
+    already holds stock (a value-only row must never create a zero-quantity
+    balance with value), the balance row is locked, and the append-only ledger
+    row and balance update commit together.
+    """
+    amount = q2(_as_decimal(value, "value"))
+    if amount <= 0:
+        raise InvalidMovement("A value-only adjustment must be greater than zero.")
+    if source_type not in SourceType.values:
+        raise InvalidMovement(f"Invalid source type {source_type!r}.")
+    if source_id is None or source_id <= 0:
+        raise InvalidMovement("Every ledger row needs a positive source document id.")
+
+    _validate_items([item_id])
+    balance = _lock_balances([item_id])[item_id]
+    if balance.qty <= 0:
+        raise InsufficientStock(
+            "Cannot add overhead value to an item with no stock; "
+            "the finished-goods balance is already zero."
+        )
+
+    entry = StockLedger.objects.create(
+        item_id=item_id,
+        movement_type=MovementType.ADJUSTMENT,
+        qty=Decimal("0.000"),
+        value=amount,
+        unit_value=Decimal("0.0000"),
+        source_type=source_type,
+        source_id=source_id,
+        created_by=user,
+    )
+    balance.value = q2(balance.value + amount)
+    balance.save(update_fields=["value", "updated_at"])
+    return entry
 
 
 @transaction.atomic

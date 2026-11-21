@@ -1,10 +1,11 @@
 name: CI
 
 on:
+  # Pushes to dev, and pull requests that target main. Nothing else triggers CI.
   push:
-    branches: [main, dev, "feature/**"]
+    branches: [dev]
   pull_request:
-    branches: [main, dev]
+    branches: [main]
 
 jobs:
   backend:
