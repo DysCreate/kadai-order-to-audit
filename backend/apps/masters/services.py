@@ -231,6 +231,22 @@ def convert_quantity(
 
 
 @transaction.atomic
+def set_item_standard_batch_hours(*, item: Item, hours: Decimal | str | int) -> Item:
+    """Set a finished good's standard batch-hours for overhead allocation.
+
+    Invariant: the value is a positive Decimal rounded to three places; the
+    product's existing runs are unaffected because allocation uses the value
+    at allocation time.
+    """
+    value = q3(hours)
+    if value <= 0:
+        raise DomainError("Standard batch-hours must be greater than zero.")
+    item.standard_batch_hours = value
+    item.save(update_fields=["standard_batch_hours"])
+    return item
+
+
+@transaction.atomic
 def create_item(
     *,
     name: str,

@@ -8,6 +8,8 @@ The expected values come from Appendix A and are never edited to make a test
 pass.
 """
 
+import uuid
+from datetime import date
 from decimal import Decimal
 from io import StringIO
 
@@ -15,7 +17,9 @@ import pytest
 from django.core.management import call_command
 from django.db.models import Sum
 
+from apps.accounts.models import User
 from apps.benchmark.services import seed_benchmark
+from apps.costing.services import record_run_overhead, run_cost_sheet
 from apps.inventory.models import MovementType, SourceType, StockBalance, StockLedger
 from apps.inventory.services import (
     PurchaseLineInput,
@@ -23,9 +27,20 @@ from apps.inventory.services import (
     reconcile_stock,
     stock_summary,
 )
-from apps.masters.models import Item, Supplier
+from apps.masters.models import Customer, Item, Supplier
+from apps.payments.services import PaymentAllocationInput, invoice_outstanding, record_payment
 from apps.production.models import ProductionRun, RunState
 from apps.production.services import complete_run, create_run, issue_run, run_variance
+from apps.sales.models import OrderState
+from apps.sales.services import (
+    DispatchLineInput,
+    OrderLineInput,
+    approve_order,
+    create_invoice,
+    create_order,
+    dispatch_invoice,
+    stock_coverage,
+)
 
 EXPECTED_CLOSING = {
     "Flour": Decimal("120.000"),
@@ -199,3 +214,125 @@ def test_benchmark_seed_loads_the_bom() -> None:
         ("200 g pouch", Decimal("200.000"), "pouch"),
         ("Carton (holds 20 packets)", Decimal("10.000"), "carton"),
     }
+
+
+@pytest.mark.django_db
+def test_benchmark_steps_4_to_8_sales_loop_and_costing() -> None:
+    """PS Appendix A steps 4-8: invoice 7,875, FG 88, shortage 32, outstanding
+    3,875, then labour and power bring the run cost to 5,855 and 31.14 per packet.
+
+    The production steps run first because the sales loop starts from the
+    finished goods the run produced.
+    """
+    seed_benchmark()
+
+    flour = Item.objects.get(name="Flour")
+    product = Item.objects.get(name="Murukku 200 g")
+    create_purchase(
+        supplier=Supplier.objects.get(name="Sri Lakshmi Flour Mills"),
+        lines=[PurchaseLineInput(item_id=flour.pk, qty="60", unit_cost="45")],
+    )
+    run = create_run(product=product, batches="1")
+    lines = {line.item.name: line for line in run.lines.select_related("item")}
+    issue_run(
+        run=run,
+        issued={
+            lines["Flour"].pk: "40",
+            lines["Cooking oil"].pk: "10.5",
+            lines["Salt and spice mix"].pk: "1.2",
+        },
+    )
+    complete_run(run=run, good_packets="188", damaged_pouches="6", cartons_used="9")
+
+    salesman_a = User.objects.get(username="salesman_a")
+    salesman_b = User.objects.get(username="salesman_b")
+    admin = User.objects.get(username="admin")
+    retailer_a = Customer.objects.get(name="Retailer A")
+    distributor_b = Customer.objects.get(name="Distributor B")
+
+    # --- Step 4: salesman A orders 150 packets for Retailer A -------------
+    submitted = create_order(
+        customer=retailer_a,
+        lines=[OrderLineInput(item_id=product.pk, qty=Decimal("150"))],
+        client_uuid=uuid.uuid4(),
+        salesman=salesman_a,
+    )
+    order = submitted.order
+    assert order.state == OrderState.SUBMITTED
+    assert order.lines.get().unit_price == Decimal("50.00")
+
+    # --- Step 5: admin approves, invoice 7,875, dispatch, FG 88 ------------
+    approve_order(order=order, user=admin)
+    invoice = create_invoice(
+        order=order,
+        user=admin,
+        invoice_date=date(2026, 5, 20),
+    )
+    assert invoice.number == "INV/26-27/00001"
+    assert invoice.taxable_total == Decimal("7500.00")
+    assert invoice.cgst_total == Decimal("187.50")
+    assert invoice.sgst_total == Decimal("187.50")
+    assert invoice.total == Decimal("7875.00")
+
+    invoice_line = invoice.lines.get()
+    dispatch_invoice(
+        invoice=invoice,
+        lines=[DispatchLineInput(invoice_line_id=invoice_line.pk, qty=Decimal("150"))],
+        user=admin,
+        dispatch_date=date(2026, 5, 21),
+    )
+    assert StockBalance.objects.get(item=product).qty == Decimal("88.000")
+    order.refresh_from_db()
+    assert order.state == OrderState.DISPATCHED
+
+    # --- Step 6: Distributor B orders 120, shortage 32, IGST 300 ----------
+    blocked = create_order(
+        customer=distributor_b,
+        lines=[OrderLineInput(item_id=product.pk, qty=Decimal("120"))],
+        client_uuid=uuid.uuid4(),
+        salesman=salesman_b,
+    )
+    coverage = stock_coverage(blocked.order)
+    assert coverage.lines[0].available_qty == Decimal("88.000")
+    assert coverage.lines[0].shortage_qty == Decimal("32.000")
+    assert coverage.tax_preview.taxable_total == Decimal("6000.00")
+    assert coverage.tax_preview.igst_total == Decimal("300.00")
+    assert coverage.tax_preview.total == Decimal("6300.00")
+
+    # --- Step 7: payment of 4,000 leaves 3,875 outstanding ----------------
+    record_payment(
+        customer=retailer_a,
+        amount=Decimal("4000"),
+        method="upi",
+        allocations=[PaymentAllocationInput(invoice_id=invoice.pk, amount=Decimal("4000"))],
+        payment_date=date(2026, 5, 25),
+        user=admin,
+    )
+    assert invoice_outstanding(invoice) == Decimal("3875.00")
+
+    # --- Step 8: labour 1,200 + gas/power 600 -> 31.14 per good packet ------
+    record_run_overhead(
+        run=run,
+        category="labour",
+        amount="1200",
+        description="Labour",
+        user=admin,
+    )
+    record_run_overhead(
+        run=run,
+        category="power",
+        amount="600",
+        description="Gas and power",
+        user=admin,
+    )
+    sheet = run_cost_sheet(run)
+    assert sheet["materials_value"] == Decimal("4055.00")
+    assert sheet["overhead_value"] == Decimal("1800.00")
+    assert sheet["total_cost"] == Decimal("5855.00")
+    assert sheet["cost_per_packet"] == Decimal("31.14")
+    assert sheet["selling_price"] == Decimal("50.00")
+    assert sheet["margin_per_packet"] == Decimal("18.86")
+    assert sheet["margin_pct"] == Decimal("37.72")
+    assert sheet["fg_stock_qty"] == Decimal("88.000")
+    assert sheet["fg_stock_value"] == Decimal("3666.30")
+    assert reconcile_stock() == []

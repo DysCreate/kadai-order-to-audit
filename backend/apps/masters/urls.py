@@ -1,3 +1,10 @@
-"""URL configuration – endpoints are added in their phase."""
+"""Masters URL configuration."""
 
-urlpatterns: list[object] = []
+from django.urls import path
+
+from . import views
+
+urlpatterns = [
+    path("customers/", views.CustomerCollectionView.as_view(), name="masters-customer-list"),
+    path("items/", views.ItemCatalogView.as_view(), name="masters-item-list"),
+]

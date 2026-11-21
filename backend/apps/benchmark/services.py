@@ -105,6 +105,19 @@ FINISHED_GOODS_NAME = "Murukku 200 g"
 
 # Tables wiped by --reset. CASCADE covers join tables (user -> customer).
 BUSINESS_TABLES: tuple[str, ...] = (
+    "payments_payment_allocation",
+    "payments_payment",
+    "sales_credit_note_line",
+    "sales_credit_note",
+    "sales_dispatch_line",
+    "sales_dispatch",
+    "sales_invoice_line",
+    "sales_invoice",
+    "sales_document_sequence",
+    "sales_order_line",
+    "sales_order",
+    "costing_overhead_allocation",
+    "costing_overhead_entry",
     "production_run_variance_snapshot",
     "production_run_line",
     "production_run",

@@ -12,6 +12,7 @@ import {
   type RunLine,
   type VarianceRow
 } from './productionApi'
+import CostSheetPanel from '../costing/CostSheetPanel'
 import { formatPct, previewVariance, type VariancePreview } from './variance'
 
 function apiErrorMessage(error: unknown, fallback: string): string {
@@ -419,6 +420,8 @@ export default function RunDetailPage() {
               </tbody>
             </table>
           </div>
+
+          <CostSheetPanel runId={run.id} />
         </section>
       )}
     </div>

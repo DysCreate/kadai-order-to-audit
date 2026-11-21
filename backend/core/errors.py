@@ -68,3 +68,9 @@ class DuplicateOrder(DomainError):
     """Raised when a client UUID is reused for a new order."""
 
     code = "duplicate_order"
+
+
+class InvalidOrderState(DomainError):
+    """Raised when an order is asked to make an illegal state transition."""
+
+    code = "invalid_order_state"

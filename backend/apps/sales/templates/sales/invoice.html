@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ invoice.number }}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 18mm 16mm;
+      }
+      body {
+        font-family: "DejaVu Sans", Arial, sans-serif;
+        font-size: 10.5pt;
+        color: #111827;
+      }
+      h1 {
+        font-size: 16pt;
+        margin: 0 0 2mm 0;
+        letter-spacing: 0.04em;
+      }
+      .muted {
+        color: #4b5563;
+      }
+      .header {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 2px solid #1e40af;
+        padding-bottom: 4mm;
+        margin-bottom: 5mm;
+      }
+      .badge {
+        display: inline-block;
+        padding: 1mm 3mm;
+        border: 1px solid #b91c1c;
+        color: #b91c1c;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+      .parties {
+        display: flex;
+        justify-content: space-between;
+        gap: 8mm;
+        margin-bottom: 5mm;
+      }
+      .parties > div {
+        width: 48%;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 3mm;
+      }
+      th,
+      td {
+        border: 1px solid #d1d5db;
+        padding: 2mm;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: #eff6ff;
+        font-size: 9pt;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      td.num,
+      th.num {
+        text-align: right;
+      }
+      tfoot td {
+        font-weight: bold;
+      }
+      .totals {
+        margin-left: auto;
+        width: 62mm;
+        margin-top: 4mm;
+      }
+      .totals td {
+        border: none;
+        padding: 1mm 0;
+      }
+      .totals td.num {
+        text-align: right;
+      }
+      .grand {
+        border-top: 1px solid #111827;
+        font-size: 12pt;
+        font-weight: bold;
+      }
+      .words {
+        margin-top: 4mm;
+        font-style: italic;
+      }
+      .footer {
+        margin-top: 14mm;
+        display: flex;
+        justify-content: space-between;
+        font-size: 9pt;
+        color: #4b5563;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div>
+        <h1>{{ factory.name }}</h1>
+        <div class="muted">{{ factory.address }}</div>
+        <div class="muted">GSTIN: {{ factory.gstin }} · State code: {{ factory.state_code }}</div>
+      </div>
+      <div>
+        <h1>TAX INVOICE</h1>
+        <div><strong>{{ invoice.number }}</strong></div>
+        <div class="muted">Date: {{ invoice.invoice_date }}</div>
+        {% if is_cancelled %}<div class="badge">Cancelled by credit note</div>{% endif %}
+      </div>
+    </div>
+
+    <div class="parties">
+      <div>
+        <strong>Billed to</strong>
+        <div>{{ invoice.customer.name }}</div>
+        {% if invoice.customer.gstin %}<div class="muted">GSTIN: {{ invoice.customer.gstin }}</div>{% endif %}
+        <div class="muted">State code: {{ invoice.customer.state_code }}</div>
+      </div>
+      <div>
+        <strong>Place of supply</strong>
+        <div>State code {{ invoice.place_of_supply_state_code }}</div>
+        <div class="muted">
+          {% if invoice.is_interstate %}Inter-state supply (IGST){% else %}Intra-state supply (CGST + SGST){% endif %}
+        </div>
+        <div class="muted">Order: {{ invoice.order.number }}</div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Description</th>
+          <th>HSN</th>
+          <th class="num">Qty</th>
+          <th class="num">Rate</th>
+          <th class="num">Taxable</th>
+          <th class="num">GST %</th>
+          <th class="num">CGST</th>
+          <th class="num">SGST</th>
+          <th class="num">IGST</th>
+          <th class="num">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in lines %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>{{ line.description }}</td>
+            <td>{{ line.hsn_code }}</td>
+            <td class="num">{{ line.qty }} {{ line.item.uom.symbol }}</td>
+            <td class="num">{{ line.unit_price }}</td>
+            <td class="num">{{ line.taxable_value }}</td>
+            <td class="num">{{ line.gst_rate }}</td>
+            <td class="num">{{ line.cgst }}</td>
+            <td class="num">{{ line.sgst }}</td>
+            <td class="num">{{ line.igst }}</td>
+            <td class="num">{{ line.line_total }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <table class="totals">
+      <tr>
+        <td>Taxable value</td>
+        <td class="num">{{ invoice.taxable_total }}</td>
+      </tr>
+      {% if invoice.is_interstate %}
+        <tr>
+          <td>IGST</td>
+          <td class="num">{{ invoice.igst_total }}</td>
+        </tr>
+      {% else %}
+        <tr>
+          <td>CGST</td>
+          <td class="num">{{ invoice.cgst_total }}</td>
+        </tr>
+        <tr>
+          <td>SGST</td>
+          <td class="num">{{ invoice.sgst_total }}</td>
+        </tr>
+      {% endif %}
+      <tr>
+        <td>Round off</td>
+        <td class="num">{{ invoice.round_off }}</td>
+      </tr>
+      <tr class="grand">
+        <td>Invoice total</td>
+        <td class="num">{{ invoice.total }}</td>
+      </tr>
+    </table>
+
+    <p class="words">Amount in words: {{ amount_in_words }}</p>
+
+    {% if credit_notes %}
+      <h3>Credit notes</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Reason</th>
+            <th class="num">Total</th>
+            <th>Restocked</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for note in credit_notes %}
+            <tr>
+              <td>{{ note.number }}</td>
+              <td>{{ note.reason }}</td>
+              <td class="num">{{ note.total }}</td>
+              <td>{% if note.restock %}Yes{% else %}No{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    <div class="footer">
+      <div>Computer-generated invoice · Kadai order-to-audit system</div>
+      <div>For {{ factory.name }}</div>
+    </div>
+  </body>
+</html>
