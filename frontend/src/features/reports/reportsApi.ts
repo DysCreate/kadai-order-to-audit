@@ -84,6 +84,12 @@ export interface Dashboard {
     margin_pct: string | null
   } | null
   outstanding_dues: { amount: string; customers: number }
+  leakage: {
+    period: string
+    amount: string
+    runs: number
+    top_culprits: { label: string; amount: string }[]
+  }
 }
 
 export async function listReports(): Promise<ReportDefinition[]> {

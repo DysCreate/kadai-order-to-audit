@@ -12,10 +12,12 @@ import {
   getOrderCoverage,
   listOrders,
   rejectOrder,
+  type LoopCloser,
   type Order,
   type OrderState
 } from './salesApi'
 import { canApprove, canInvoice } from './orderStatus'
+import { createRun } from '../production/productionApi'
 
 const FILTERS: (OrderState | 'ALL')[] = ['SUBMITTED', 'APPROVED', 'ALL']
 
@@ -89,6 +91,17 @@ export default function AdminOrderInboxPage() {
     mutationFn: () => rejectOrder(selectedId as number, rejectReason),
     onSuccess: refresh,
     onError: onFailure(t('sales.inbox.rejectError'))
+  })
+
+  const runMutation = useMutation({
+    mutationFn: (plan: LoopCloser) =>
+      createRun(plan.product_id, String(plan.batches_needed)),
+    onSuccess: (run) => {
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: ['production-runs'] })
+      navigate(`/production/runs/${run.id}`)
+    },
+    onError: onFailure(t('sales.inbox.runError'))
   })
 
   const invoiceMutation = useMutation({
@@ -331,6 +344,71 @@ export default function AdminOrderInboxPage() {
                 )}
               </div>
             )}
+
+            {(coverage.data?.loop_closers ?? []).map((plan) => (
+              <div
+                key={plan.product_id}
+                className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-blue-900">
+                    {t('sales.inbox.loopCloser')}
+                  </span>
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                      plan.feasible
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {t(`sales.inbox.verdicts.${plan.verdict}`)}
+                  </span>
+                </div>
+                <p className="mt-1 text-blue-900">
+                  {t('sales.inbox.loopCloserText', {
+                    batches: plan.batches_needed,
+                    allowed: plan.batches_allowed,
+                    limit: plan.limiting_item,
+                    factor: plan.yield_factor
+                  })}
+                </p>
+                <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-blue-900">
+                  {plan.capacity.map((row) => (
+                    <li key={row.item_id} className={row.limiting ? 'font-semibold' : ''}>
+                      {t('sales.inbox.capacity', {
+                        item: row.item_name,
+                        ratio: Number(row.ratio).toFixed(2),
+                        batches: row.batches_available
+                      })}
+                    </li>
+                  ))}
+                </ul>
+                {plan.purchase_list.length > 0 && (
+                  <div className="mt-2 rounded bg-white p-2 text-xs text-gray-700">
+                    <div className="font-medium text-gray-800">
+                      {t('sales.inbox.purchaseList')}
+                    </div>
+                    <ul className="mt-1 space-y-0.5">
+                      {plan.purchase_list.map((row) => (
+                        <li key={row.item_id}>
+                          {row.item_name}: {row.qty} {row.uom}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {plan.batches_needed > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => runMutation.mutate(plan)}
+                    disabled={runMutation.isPending}
+                    className="mt-2 min-h-[44px] w-full rounded-md bg-blue-800 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {t('sales.inbox.planRun', { batches: plan.batches_needed })}
+                  </button>
+                )}
+              </div>
+            ))}
 
             {canApprove(selected.state) && (
               <div className="space-y-3 border-t border-gray-200 pt-3">

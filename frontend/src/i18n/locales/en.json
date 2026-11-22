@@ -26,7 +26,8 @@
     "primary": "Primary",
     "skipToContent": "Skip to main content",
     "logout": "Sign Out",
-    "welcome": "Welcome to Kadai order-to-audit system."
+    "welcome": "Welcome to Kadai order-to-audit system.",
+    "benchmark": "Benchmark"
   },
   "sales": {
     "loading": "Loading…",
@@ -99,7 +100,19 @@
       "editError": "Could not save the line.",
       "approveError": "Could not approve the order.",
       "rejectError": "Could not reject the order.",
-      "invoiceError": "Could not raise the invoice."
+      "invoiceError": "Could not raise the invoice.",
+      "loopCloser": "Loop Closer",
+      "loopCloserText": "{{batches}} batch(es) needed at a {{factor}} trailing yield; stock allows {{allowed}}, limited by {{limit}}.",
+      "capacity": "{{item}}: {{ratio}} batches ({{batches}} whole)",
+      "purchaseList": "Draft purchase list",
+      "planRun": "Plan {{batches}} production batch(es)",
+      "runError": "Could not plan the production run.",
+      "verdicts": {
+        "feasible": "Feasible",
+        "purchase_needed": "Purchase needed",
+        "insufficient_stock": "Insufficient stock",
+        "nothing_to_produce": "Nothing to produce"
+      }
     },
     "invoices": {
       "title": "Invoices",
@@ -232,6 +245,31 @@
       "yieldHint": "Plan: {{qty}} good packets",
       "pouchHint": "Plan: {{qty}} pouches",
       "cartonHint": "Plan: {{qty}} cartons"
+    },
+    "leakage": {
+      "title": "Leakage Radar report card",
+      "subtitle": "Standard cost from this BOM version versus what the ledger actually recorded.",
+      "input": "Input",
+      "standard": "Standard",
+      "actual": "Actual",
+      "priceImpact": "Price impact",
+      "usageImpact": "Usage impact",
+      "impact": "Impact",
+      "rate": "std {{standard}} / actual {{actual}}",
+      "materials": "Materials",
+      "bridgeTitle": "Cost per packet bridge",
+      "actualMaterialPerPacket": "Actual material per packet",
+      "overheadPerPacket": "Overhead per packet",
+      "costPerPacket": "Cost per good packet",
+      "yieldGapTitle": "Yield gap",
+      "yieldGapText": "{{gap}} packets missing = {{damaged}} recorded damaged + {{unexplained}} unexplained.",
+      "recordedDamage": "Recorded damage",
+      "unexplained": "Unexplained",
+      "trendsTitle": "Ingredient trends",
+      "trendsHint": "Per-input variance across recent runs. Drift means adverse beyond half the tolerance for three runs.",
+      "drift": "{{item}} has drifted for {{runs}} runs (latest {{pct}}); investigate before it breaches the limit.",
+      "noDrift": "No drift: every input is inside half the tolerance or improving.",
+      "loadError": "Could not load the report card."
     }
   },
   "costing": {
@@ -295,7 +333,10 @@
     "value": "Value",
     "status": "Cover",
     "reorder": "Reorder {{qty}}",
-    "ok": "OK"
+    "ok": "OK",
+    "leakage": "Leakage this month",
+    "leakageHint": "Top culprit: {{label}} ({{amount}})",
+    "noLeakage": "No adverse leakage this month"
   },
   "reports": {
     "title": "Reports",
@@ -318,5 +359,21 @@
       "note": "Note",
       "credit_note_taxable": "Credit-note taxable"
     }
+  },
+  "benchmark": {
+    "title": "Benchmark Console",
+    "subtitle": "Replay Appendix A through the same services the API uses.",
+    "run": "Run benchmark",
+    "running": "Running…",
+    "hint": "The scenario runs in a transaction that is rolled back, so the console never changes live data.",
+    "error": "Could not run the benchmark.",
+    "allPassed": "All {{passed}} checks passed.",
+    "failed": "{{failed}} check(s) failed; {{passed}} passed.",
+    "check": "Check",
+    "expected": "Expected",
+    "actual": "Actual",
+    "result": "Result",
+    "pass": "PASS",
+    "fail": "FAIL"
   }
 }

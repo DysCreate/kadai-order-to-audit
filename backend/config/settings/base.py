@@ -143,6 +143,9 @@ REST_FRAMEWORK = {
         "rest_framework.renderers.JSONRenderer",
     ],
     "COERCE_DECIMAL_TO_STRING": True,
+    # ``?format=`` selects a report export (csv/excel/pdf) in the view; DRF's
+    # renderer negotiation must not claim the parameter and 404 on it.
+    "URL_FORMAT_OVERRIDE": None,
     "EXCEPTION_HANDLER": "core.api.domain_exception_handler",
 }
 

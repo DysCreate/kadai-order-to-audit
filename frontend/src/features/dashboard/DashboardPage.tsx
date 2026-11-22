@@ -66,7 +66,7 @@ export default function DashboardPage() {
 
       {data && (
         <>
-          <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <Tile
               label={t('dashboard.todayOrders')}
               value={String(data.today_orders.count)}
@@ -89,6 +89,18 @@ export default function DashboardPage() {
               label={t('dashboard.reorderLines')}
               value={String(data.reorder_count)}
               hint={t('dashboard.reorderHint')}
+            />
+            <Tile
+              label={t('dashboard.leakage')}
+              value={formatMoney(data.leakage.amount)}
+              hint={
+                data.leakage.top_culprits.length > 0
+                  ? t('dashboard.leakageHint', {
+                      label: data.leakage.top_culprits[0].label,
+                      amount: formatMoney(data.leakage.top_culprits[0].amount)
+                    })
+                  : t('dashboard.noLeakage')
+              }
             />
           </section>
 

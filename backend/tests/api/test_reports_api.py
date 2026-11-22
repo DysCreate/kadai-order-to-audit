@@ -297,6 +297,14 @@ def test_owner_dashboard_matches_the_day(client: object, scenario: dict) -> None
     assert body["reorder_count"] == 0
     assert any(row["item_name"] == "Murukku 200 g" for row in body["stock"])
 
+    # Phase 6b: leakage this month = adverse material 115 + 12 missing packets x 19.85.
+    # Favourable pouch and carton usage do not offset it; the tile sums adverse only.
+    assert body["leakage"]["amount"] == "353.20"
+    assert body["leakage"]["top_culprits"][0] == {
+        "label": "Yield shortfall",
+        "amount": "238.20",
+    }
+
 
 def test_dashboard_flags_finished_goods_when_empty(client: object, scenario: dict) -> None:
     """Phase 5: finished goods at zero are a reorder line."""

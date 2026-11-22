@@ -26,6 +26,9 @@ dist/
 # Docker / local volumes
 postgres_data/
 
+# Local agent skills
+.agents/
+
 # IDE
 .vscode/
 .idea/

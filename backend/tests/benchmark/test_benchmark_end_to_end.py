@@ -30,7 +30,13 @@ from apps.inventory.services import (
 from apps.masters.models import Customer, Item, Supplier
 from apps.payments.services import PaymentAllocationInput, invoice_outstanding, record_payment
 from apps.production.models import ProductionRun, RunState
-from apps.production.services import complete_run, create_run, issue_run, run_variance
+from apps.production.services import (
+    complete_run,
+    create_run,
+    issue_run,
+    run_report_card,
+    run_variance,
+)
 from apps.sales.models import OrderState
 from apps.sales.services import (
     DispatchLineInput,
@@ -299,6 +305,22 @@ def test_benchmark_steps_4_to_8_sales_loop_and_costing() -> None:
     assert coverage.tax_preview.igst_total == Decimal("300.00")
     assert coverage.tax_preview.total == Decimal("6300.00")
 
+    # PS 2.3 Loop Closer: one batch needed, one allowed, pouches limiting.
+    assert len(coverage.loop_closers) == 1
+    plan = coverage.loop_closers[0]
+    assert plan.batches_needed == 1
+    assert plan.batches_allowed == 1
+    assert plan.feasible is True
+    assert plan.limiting_item == "200 g pouch"
+    assert plan.verdict == "feasible"
+    assert plan.purchase_list == ()
+    ratios = {row.item_name: row.ratio for row in plan.capacity}
+    assert ratios["200 g pouch"] == Decimal("1.5300")
+    assert ratios["Cooking oil"] == Decimal("1.9500")
+    assert ratios["Carton (holds 20 packets)"] == Decimal("2.1000")
+    assert ratios["Flour"] == Decimal("3.0000")
+    assert ratios["Salt and spice mix"] == Decimal("3.1667")
+
     # --- Step 7: payment of 4,000 leaves 3,875 outstanding ----------------
     record_payment(
         customer=retailer_a,
@@ -335,4 +357,22 @@ def test_benchmark_steps_4_to_8_sales_loop_and_costing() -> None:
     assert sheet["margin_pct"] == Decimal("37.72")
     assert sheet["fg_stock_qty"] == Decimal("88.000")
     assert sheet["fg_stock_value"] == Decimal("3666.30")
+
+    # PS 2.1 Leakage Radar: the report card matches Appendix A's USP table.
+    card = run_report_card(run)
+    assert card.standard_materials == Decimal("3970.00")
+    assert card.actual_materials == Decimal("4055.00")
+    assert card.material_impact == Decimal("85.00")
+    assert card.price_impact == Decimal("45.00")
+    assert card.usage_impact == Decimal("40.00")
+    bridge = {step.key: step.amount for step in card.bridge}
+    assert bridge["standard_material"] == Decimal("19.85")
+    assert bridge["yield_shortfall"] == Decimal("1.27")
+    assert bridge["price_usage"] == Decimal("0.45")
+    assert bridge["overhead"] == Decimal("9.57")
+    assert card.actual_material_per_packet == Decimal("21.57")
+    assert card.cost_per_packet == Decimal("31.14")
+    assert card.yield_gap.gap_packets == Decimal("12.000")
+    assert card.yield_gap.damaged_packets == Decimal("6.000")
+    assert card.yield_gap.unexplained_packets == Decimal("6.000")
     assert reconcile_stock() == []

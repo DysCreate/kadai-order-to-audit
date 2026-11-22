@@ -85,7 +85,13 @@ class BOM(models.Model):
 
 
 class BOMLine(models.Model):
-    """One input of a BOM version, per batch, in the item's base unit."""
+    """One input of a BOM version, per batch, in the item's base unit.
+
+    ``standard_rate`` is the standard cost of one base unit at this BOM
+    version. It is captured when the version is created, so the Leakage Radar
+    compares a run with the standard it was planned against even after a later
+    BOM version changes the rate.
+    """
 
     bom = models.ForeignKey(BOM, on_delete=models.CASCADE, related_name="lines")
     item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name="bom_lines")
@@ -95,6 +101,7 @@ class BOMLine(models.Model):
         default=BOMLineRole.MATERIAL,
     )
     qty_per_batch = models.DecimalField(max_digits=14, decimal_places=3)
+    standard_rate = models.DecimalField(max_digits=14, decimal_places=4, default=Decimal("0.0000"))
 
     class Meta:
         db_table = "production_bom_line"
@@ -104,6 +111,10 @@ class BOMLine(models.Model):
             models.CheckConstraint(
                 check=models.Q(qty_per_batch__gt=0),
                 name="chk_bom_line_qty_positive",
+            ),
+            models.CheckConstraint(
+                check=models.Q(standard_rate__gte=0),
+                name="chk_bom_line_standard_rate_non_negative",
             ),
         ]
 

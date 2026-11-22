@@ -13,6 +13,7 @@ import {
   type VarianceRow
 } from './productionApi'
 import CostSheetPanel from '../costing/CostSheetPanel'
+import ReportCardPanel from './ReportCardPanel'
 import { formatPct, previewVariance, type VariancePreview } from './variance'
 import { SkeletonDetailPage } from '../../components/Skeleton'
 
@@ -423,6 +424,7 @@ export default function RunDetailPage() {
           </div>
 
           <CostSheetPanel runId={run.id} />
+          <ReportCardPanel runId={run.id} productId={run.product_id} />
         </section>
       )}
     </div>

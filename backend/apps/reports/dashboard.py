@@ -24,6 +24,7 @@ from apps.inventory.services import stock_summary
 from apps.masters.models import Customer, Item, ItemType
 from apps.payments.services import customer_outstanding
 from apps.production.models import BOMLine, ProductionRun, RunState, RunVarianceSnapshot
+from apps.production.services import leakage_summary
 from apps.sales.models import Order, OrderLine, OrderState
 from apps.sales.numbering import KOLKATA, kolkata_today
 from core.money import q2
@@ -155,4 +156,5 @@ def dashboard() -> dict[str, Any]:
             "amount": q2(dues),
             "customers": customers_with_dues,
         },
+        "leakage": leakage_summary(today=today),
     }

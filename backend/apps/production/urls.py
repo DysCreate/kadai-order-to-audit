@@ -15,4 +15,14 @@ urlpatterns = [
         name="production-run-complete",
     ),
     path("runs/<int:pk>/amend/", views.RunAmendView.as_view(), name="production-run-amend"),
+    path(
+        "runs/<int:pk>/report-card/",
+        views.RunReportCardView.as_view(),
+        name="production-run-report-card",
+    ),
+    path(
+        "products/<int:pk>/leakage/",
+        views.ProductLeakageView.as_view(),
+        name="production-product-leakage",
+    ),
 ]

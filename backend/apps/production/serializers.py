@@ -27,7 +27,15 @@ class BOMLineSerializer(serializers.ModelSerializer[BOMLine]):
 
     class Meta:
         model = BOMLine
-        fields = ("id", "item_id", "item_name", "uom", "role", "qty_per_batch")
+        fields = (
+            "id",
+            "item_id",
+            "item_name",
+            "uom",
+            "role",
+            "qty_per_batch",
+            "standard_rate",
+        )
 
 
 class BOMSerializer(serializers.ModelSerializer[BOM]):
@@ -56,6 +64,13 @@ class BOMLineInputSerializer(serializers.Serializer[Any]):
     item = serializers.PrimaryKeyRelatedField(queryset=Item.objects.all())
     qty_per_batch = serializers.DecimalField(max_digits=14, decimal_places=3)
     role = serializers.ChoiceField(choices=BOMLineRole.choices, default=BOMLineRole.MATERIAL)
+    standard_rate = serializers.DecimalField(
+        max_digits=14,
+        decimal_places=4,
+        min_value=Decimal("0"),
+        required=False,
+        default=Decimal("0"),
+    )
 
 
 class BOMCreateSerializer(serializers.Serializer[Any]):
@@ -204,3 +219,105 @@ class RunAmendSerializer(serializers.Serializer[Any]):
     """Input for amending an issued run: a mandatory reason."""
 
     reason = serializers.CharField(max_length=255, allow_blank=False)
+
+
+class ReportCardLineSerializer(serializers.Serializer[Any]):
+    """Standard versus actual for one input, split into price and usage."""
+
+    item_id = serializers.IntegerField()
+    item_name = serializers.CharField()
+    role = serializers.CharField()
+    planned_qty = serializers.DecimalField(max_digits=14, decimal_places=3)
+    actual_qty = serializers.DecimalField(max_digits=14, decimal_places=3)
+    standard_rate = serializers.DecimalField(max_digits=14, decimal_places=4)
+    actual_rate = serializers.DecimalField(max_digits=14, decimal_places=4)
+    standard_value = serializers.DecimalField(max_digits=14, decimal_places=2)
+    actual_value = serializers.DecimalField(max_digits=14, decimal_places=2)
+    price_impact = serializers.DecimalField(max_digits=14, decimal_places=2)
+    usage_impact = serializers.DecimalField(max_digits=14, decimal_places=2)
+    total_impact = serializers.DecimalField(max_digits=14, decimal_places=2)
+
+
+class BridgeStepSerializer(serializers.Serializer[Any]):
+    """One step of the cost-per-packet bridge."""
+
+    key = serializers.CharField()
+    label = serializers.CharField()
+    amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    cumulative = serializers.DecimalField(max_digits=14, decimal_places=2)
+
+
+class YieldGapSerializer(serializers.Serializer[Any]):
+    """The missing packets, split into recorded damage and unexplained loss."""
+
+    planned_packets = serializers.DecimalField(max_digits=14, decimal_places=3)
+    good_packets = serializers.DecimalField(max_digits=14, decimal_places=3)
+    gap_packets = serializers.DecimalField(max_digits=14, decimal_places=3)
+    damaged_packets = serializers.DecimalField(max_digits=14, decimal_places=3)
+    unexplained_packets = serializers.DecimalField(max_digits=14, decimal_places=3)
+
+
+class ReportCardSerializer(serializers.Serializer[Any]):
+    """The complete Leakage Radar Run Report Card."""
+
+    lines = ReportCardLineSerializer(many=True)
+    standard_materials = serializers.DecimalField(max_digits=14, decimal_places=2)
+    actual_materials = serializers.DecimalField(max_digits=14, decimal_places=2)
+    price_impact = serializers.DecimalField(max_digits=14, decimal_places=2)
+    usage_impact = serializers.DecimalField(max_digits=14, decimal_places=2)
+    material_impact = serializers.DecimalField(max_digits=14, decimal_places=2)
+    planned_packets = serializers.DecimalField(max_digits=14, decimal_places=3)
+    good_packets = serializers.DecimalField(max_digits=14, decimal_places=3)
+    overhead_value = serializers.DecimalField(max_digits=14, decimal_places=2)
+    standard_per_packet = serializers.DecimalField(max_digits=14, decimal_places=2)
+    actual_material_per_packet = serializers.DecimalField(max_digits=14, decimal_places=2)
+    overhead_per_packet = serializers.DecimalField(max_digits=14, decimal_places=2)
+    cost_per_packet = serializers.DecimalField(max_digits=14, decimal_places=2)
+    bridge = BridgeStepSerializer(many=True)
+    yield_gap = YieldGapSerializer()
+    selling_price = serializers.DecimalField(max_digits=14, decimal_places=2, allow_null=True)
+    margin_per_packet = serializers.DecimalField(max_digits=14, decimal_places=2, allow_null=True)
+    margin_pct = serializers.DecimalField(max_digits=14, decimal_places=2, allow_null=True)
+
+
+class VariancePointSerializer(serializers.Serializer[Any]):
+    """One run's stored variance for an input."""
+
+    run_id = serializers.IntegerField()
+    variance_pct = serializers.DecimalField(max_digits=9, decimal_places=6, allow_null=True)
+    direction = serializers.CharField()
+
+
+class IngredientTrendSerializer(serializers.Serializer[Any]):
+    """The variance series for one input, oldest run first."""
+
+    item_name = serializers.CharField()
+    points = VariancePointSerializer(many=True)
+
+
+class DriftAlertSerializer(serializers.Serializer[Any]):
+    """An input that has crept adverse for three consecutive runs."""
+
+    item_name = serializers.CharField()
+    consecutive_runs = serializers.IntegerField()
+    latest_variance_pct = serializers.DecimalField(max_digits=9, decimal_places=6, allow_null=True)
+    threshold = serializers.DecimalField(max_digits=9, decimal_places=6)
+    direction = serializers.CharField()
+
+
+class RunTrendRefSerializer(serializers.Serializer[Any]):
+    """A completed run's identity for the trend axis."""
+
+    run_id = serializers.IntegerField()
+    completed_at = serializers.CharField(allow_null=True)
+
+
+class LeakageTrendsSerializer(serializers.Serializer[Any]):
+    """Per-input variance trends and drift alerts for one product."""
+
+    product_id = serializers.IntegerField()
+    product_name = serializers.CharField()
+    runs = RunTrendRefSerializer(many=True)
+    ingredients = IngredientTrendSerializer(many=True)
+    drift_alerts = DriftAlertSerializer(many=True)
+    tolerance = serializers.DecimalField(max_digits=9, decimal_places=6)

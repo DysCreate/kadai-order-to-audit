@@ -37,6 +37,8 @@ from apps.inventory.models import MovementType, SourceType, StockBalance
 from apps.inventory.services import Movement, post_movements
 from apps.masters.models import Customer, Item, ItemType
 from apps.masters.services import get_setting, resolve_price
+from apps.production.loop_closer import LoopCloserPlan, RequirementInput, plan_batches
+from apps.production.services import get_active_bom, trailing_yield_factor
 from core.audit import log_audit
 from core.errors import (
     DomainError,
@@ -130,12 +132,18 @@ class CoverageLine:
 
 @dataclass(frozen=True)
 class OrderCoverage:
-    """Per-line stock coverage plus the tax the order would carry."""
+    """Per-line stock coverage plus the tax the order would carry.
+
+    ``loop_closers`` carries one batch plan per finished-goods line that is
+    short, so the admin can see whether production (or a purchase) can close
+    the gap before approving.
+    """
 
     lines: tuple[CoverageLine, ...]
     total_shortage_qty: Decimal
     tax_preview: TaxSummary
     is_interstate: bool
+    loop_closers: tuple[LoopCloserPlan, ...] = ()
 
 
 def _as_decimal(value: Decimal | str | int, field: str) -> Decimal:
@@ -527,11 +535,58 @@ def _order_tax_preview(order: Order) -> TaxSummary:
     )
 
 
+def _loop_closers(coverage: list[CoverageLine]) -> tuple[LoopCloserPlan, ...]:
+    """Build a batch plan for each short finished-goods line.
+
+    A line without an active BOM, or without a shortage, contributes nothing:
+    the panel is an answer to a shortage, not a second stock check.
+    """
+    plans: list[LoopCloserPlan] = []
+    for row in coverage:
+        item = row.line.item
+        if row.shortage_qty <= 0 or item.item_type != ItemType.FG:
+            continue
+        try:
+            bom = get_active_bom(item)
+        except DomainError:
+            continue
+
+        bom_lines = list(bom.lines.select_related("item__uom").order_by("pk"))
+        balances = StockBalance.objects.in_bulk(
+            [line.item_id for line in bom_lines], field_name="item_id"
+        )
+        requirements = [
+            RequirementInput(
+                item_id=line.item_id,
+                item_name=line.item.name,
+                uom=line.item.uom.symbol,
+                qty_per_batch=line.qty_per_batch,
+                stock_qty=(
+                    balances[line.item_id].qty if line.item_id in balances else Decimal("0.000")
+                ),
+            )
+            for line in bom_lines
+        ]
+        plans.append(
+            plan_batches(
+                product_id=item.pk,
+                product_name=item.name,
+                shortage_qty=row.shortage_qty,
+                batch_output_qty=bom.batch_output_qty,
+                yield_factor=trailing_yield_factor(item),
+                requirements=requirements,
+            )
+        )
+    return tuple(plans)
+
+
 def stock_coverage(order: Order) -> OrderCoverage:
     """Return per-line stock coverage and the tax preview for an order.
 
     ``available`` is on-hand stock minus commitments to other orders and
-    invoices, so the admin sees what is actually free for this order.
+    invoices, so the admin sees what is actually free for this order. When a
+    finished-goods line is short, the result also carries a Loop Closer batch
+    plan for that product.
     """
     lines = list(order.lines.select_related("item__uom").order_by("pk"))
     coverage: list[CoverageLine] = []
@@ -561,6 +616,7 @@ def stock_coverage(order: Order) -> OrderCoverage:
         total_shortage_qty=q3(total_shortage),
         tax_preview=_order_tax_preview(order),
         is_interstate=order.customer.state_code != _factory_state_code(),
+        loop_closers=_loop_closers(coverage),
     )
 
 

@@ -12,6 +12,7 @@ import InvoiceDetailPage from '../features/sales/InvoiceDetailPage'
 import PaymentsPage from '../features/payments/PaymentsPage'
 import DashboardPage from '../features/dashboard/DashboardPage'
 import ReportsPage from '../features/reports/ReportsPage'
+import BenchmarkPage from '../features/benchmark/BenchmarkPage'
 import NotFoundPage from './NotFoundPage'
 
 const ALL_ROLES = ['salesman', 'admin', 'production', 'accountant', 'owner']
@@ -24,7 +25,8 @@ const NAV_ITEMS: { to: string; labelKey: string; roles: string[] }[] = [
   { to: '/invoices', labelKey: 'nav.invoices', roles: ['salesman', 'admin', 'accountant', 'owner'] },
   { to: '/payments', labelKey: 'nav.payments', roles: ['admin', 'accountant', 'owner'] },
   { to: '/production', labelKey: 'nav.production', roles: ['production', 'admin', 'owner'] },
-  { to: '/reports', labelKey: 'nav.reports', roles: ['admin', 'production', 'accountant', 'owner'] }
+  { to: '/reports', labelKey: 'nav.reports', roles: ['admin', 'production', 'accountant', 'owner'] },
+  { to: '/benchmark', labelKey: 'nav.benchmark', roles: ['admin', 'owner'] }
 ]
 
 function Welcome() {
@@ -112,6 +114,7 @@ export default function Layout() {
           <Route path="/production" element={<RunListPage />} />
           <Route path="/production/runs/:id" element={<RunDetailPage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/benchmark" element={<BenchmarkPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>

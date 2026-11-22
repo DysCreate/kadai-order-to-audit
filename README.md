@@ -62,7 +62,9 @@ Then open http://localhost:3000
 | Sales loop (orders, invoices, dispatch, credit notes, payments) | ✅ Phase 3 |
 | Costing (overheads, cost sheet, FG cost and margin) | ✅ Phase 4 |
 | Reports, exports, reconciliation and owner dashboard | ✅ Phase 5 |
-| Leakage Radar | 🚧 Phase 6 |
+| Leakage Radar (report card, bridge, drift, leakage tile) | ✅ Phase 6 |
+| Loop Closer (shortage → batches → purchase) | ✅ Phase 6 |
+| Benchmark Console (UI, CLI and CI) | ✅ Phase 6 |
 | Offline PWA | 🚧 Phase 7 |
 
 ## Phase 1 Inventory API
@@ -161,6 +163,25 @@ Every report accepts a business-date range and exports to CSV, Excel and PDF
 from the same rows the screen shows. Reconciliation runs three checks: every
 stock balance equals its ledger sum, every invoice total equals its line sum,
 and the sales register's taxable total equals the GST summary's taxable total.
+
+## Phase 6 USP API
+
+| Method | Path | Allowed roles |
+|--------|------|---------------|
+| GET | `/api/production/runs/<id>/report-card/` | production, admin, accountant, owner |
+| GET | `/api/production/products/<id>/leakage/` | production, admin, accountant, owner |
+| GET | `/api/sales/orders/<id>/coverage/` | admin, accountant, owner (now carries `loop_closers`) |
+| POST | `/api/benchmark/run/` | admin, owner |
+
+`make benchmark` (or `python manage.py run_benchmark`) replays Appendix A
+through the same services the API uses and prints every expected value with a
+PASS/FAIL verdict; it exits non-zero on any mismatch and runs in a transaction
+that is rolled back, so it never leaves benchmark data behind. The admin-only
+console at `/benchmark` runs the same scenario from the browser. The run screen
+at `/production/runs/<id>` shows the Leakage Radar report card and its
+cost-per-packet bridge, the ingredient trends and drift alerts. The admin order
+inbox shows the Loop Closer panel on a shortage, including the limiting input
+and a one-click planned production run.
 
 ## Sales loop
 
@@ -280,6 +301,40 @@ Phase 5 adds these reporting readings:
     salesmen's orders. The accountant remains read-only, and the dashboard is
     limited to admin, accountant and owner.
 
+Phase 6 adds these USP readings:
+
+20. **Standard cost is a BOM-version snapshot.** Each BOM line stores the
+    standard rate it was created with (Appendix A: 42, 140, 200, 2.50, 15), so
+    a report card always compares a run with the standard it was planned
+    against, never a later purchase price or BOM version.
+21. **Price and usage split at actual-at-standard.** Price impact is
+    `actual value − q2(actual qty × standard rate)` and usage impact is
+    `q2(actual qty × standard rate) − standard value`; their sum is exactly
+    actual − standard, with no paisa lost to rounding.
+22. **The bridge is additive.** Steps are derived from rounded cumulative
+    values, so 19.85 + 1.27 + 0.45 + 9.57 equals the 31.14 cost per good
+    packet even when an input rounds awkwardly.
+23. **Damage is explained only up to the gap.** The yield gap is
+    `planned − good`; recorded damaged pouches explain that gap up to its size,
+    and anything beyond is not double counted. The benchmark's 12-packet gap is
+    6 recorded damaged and 6 unexplained.
+24. **Drift is a warning, not a second flag.** An input drifts when it is
+    adverse beyond half the tolerance on three consecutive completed runs.
+    This is separate from the hard variance flag and never rewrites snapshots.
+25. **The Loop Closer plans on realised yield.** The batch need is
+    `ceil(shortage / (batch output × trailing yield))`, with the trailing yield
+    taken over the last five completed runs of the product (0.94 in the
+    benchmark). Whole batches are the minimum across BOM inputs, the limiting
+    item is the smallest stock-to-requirement ratio, and a purchase list is
+    only produced for a genuine gap, rounded up.
+26. **The Benchmark Console is effectively read-only.** The scenario seeds and
+    replays Appendix A inside one transaction and rolls it back, so a run never
+    changes live stock, invoices or audit rows.
+27. **Leakage this month sums adverse money only.** The dashboard tile adds
+    positive price and usage impacts plus the standard cost of missing packets;
+    favourable lines do not net it down, and the top three culprits are shown.
+    In the benchmark that is 115 adverse material + 238.20 yield = 353.20.
+
 ## Benchmark Results
 
 `tests/benchmark/test_benchmark_end_to_end.py` replays Appendix A steps 1-3
@@ -295,5 +350,10 @@ B's 120-packet order reports a shortage of 32 with an IGST preview of 300.00 on
 Step 8 adds labour 1,200.00 and gas/power 600.00: materials 4,055.00 + overheads
 1,800.00 = 5,855.00, cost per good packet 31.14, margin 18.86 (37.72%) at a
 selling price of 50.00. After the overheads the remaining 88 packets carry
-3,666.30 of value. `make benchmark` (the Benchmark Console of Phase 6) is not
-implemented yet.
+3,666.30 of value. The Leakage Radar report card adds standard 3,970.00 versus actual 4,055.00
+(+85.00), the per-packet bridge 19.85 + 1.27 + 0.45 + 9.57 = 31.14, and the
+yield gap of 12 packets split into 6 recorded damaged and 6 unexplained. The
+Loop Closer reports one batch needed and one allowed, with pouches limiting
+(1.53 batches), and no purchase list. `make benchmark` asserts all of these,
+plus the invoice, shortage, outstanding and costing checks, and exits non-zero
+if any expected value disagrees.

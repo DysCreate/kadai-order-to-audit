@@ -18,7 +18,9 @@ Invariants protected:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime, time
 from decimal import Decimal, InvalidOperation
+from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.db.models import Max, QuerySet, Sum
@@ -36,9 +38,17 @@ from core.errors import (
     InvalidMovement,
     InvalidRunState,
 )
-from core.money import q2
+from core.money import q2, q4
 from core.quantity import q3
 
+from .leakage import (
+    DriftAlert,
+    LeakageReportCard,
+    ReportCardLineInput,
+    VariancePoint,
+    build_report_card,
+    detect_drift,
+)
 from .models import (
     BOM,
     BOMLine,
@@ -52,15 +62,18 @@ from .models import (
 from .variance import compute_variance
 
 DEFAULT_TOLERANCE = Decimal("0.03")
+INDIA = ZoneInfo("Asia/Kolkata")
+TRAILING_YIELD_RUNS = 5
 
 
 @dataclass(frozen=True)
 class BOMLineInput:
-    """One input of a new BOM version."""
+    """One input of a new BOM version, with its standard cost rate."""
 
     item_id: int
     qty_per_batch: Decimal
     role: str = BOMLineRole.MATERIAL
+    standard_rate: Decimal = Decimal("0.0000")
 
 
 def _as_decimal(value: Decimal | str | int, field: str) -> Decimal:
@@ -154,7 +167,12 @@ def create_bom_version(
         qty = q3(_as_decimal(line.qty_per_batch, "qty_per_batch"))
         if qty <= 0:
             raise DomainError("A BOM line quantity must be greater than zero.")
-        normalized.append(BOMLineInput(item_id=line.item_id, qty_per_batch=qty, role=role))
+        rate = q4(_as_decimal(line.standard_rate, "standard_rate"))
+        if rate < 0:
+            raise DomainError("A BOM standard rate cannot be negative.")
+        normalized.append(
+            BOMLineInput(item_id=line.item_id, qty_per_batch=qty, role=role, standard_rate=rate)
+        )
 
     known = set(Item.objects.filter(pk__in=seen_items).values_list("pk", flat=True))
     missing = sorted(seen_items - known)
@@ -180,6 +198,7 @@ def create_bom_version(
                 item_id=line.item_id,
                 role=line.role,
                 qty_per_batch=line.qty_per_batch,
+                standard_rate=line.standard_rate,
             )
             for line in normalized
         ]
@@ -604,3 +623,217 @@ def run_variance(run: ProductionRun) -> list[RunVarianceSnapshot]:
         return []
     latest_revision = max(row.revision for row in rows)
     return [row for row in rows if row.revision == latest_revision]
+
+
+# ---------------------------------------------------------------------------
+# Leakage Radar
+# ---------------------------------------------------------------------------
+
+
+def _run_material_values(run: ProductionRun) -> dict[int, Decimal]:
+    """Return the net ledger value of each input the run consumed, as positive cost."""
+    rows = (
+        StockLedger.objects.filter(
+            source_type=SourceType.PRODUCTION_RUN,
+            source_id=run.pk,
+        )
+        .exclude(item_id=run.product_id)
+        .values("item_id")
+        .annotate(value_sum=Sum("value"))
+    )
+    values: dict[int, Decimal] = {}
+    for row in rows:
+        values[int(row["item_id"])] = q2(-(row["value_sum"] or Decimal("0.00")))
+    return values
+
+
+def run_report_card(run: ProductionRun) -> LeakageReportCard:
+    """Return the Leakage Radar report card for one completed run.
+
+    Invariants: only a COMPLETED run has a card; standard rates come from the
+    BOM version the run was built from (never the latest BOM or a purchase
+    price); actual values are the run's net ledger cost per input; overheads
+    and the selling price come from the same cost sheet used by costing.
+    """
+    run = ProductionRun.objects.select_related("product").get(pk=run.pk)
+    if run.state != RunState.COMPLETED:
+        raise InvalidRunState(
+            f"Run {run.pk} is {run.state}; a report card is available only after completion."
+        )
+
+    run_lines = list(run.lines.select_related("item").order_by("pk"))
+    standard_rates = dict(
+        BOMLine.objects.filter(bom_id=run.bom_id).values_list("item_id", "standard_rate")
+    )
+    actual_values = _run_material_values(run)
+
+    inputs = [
+        ReportCardLineInput(
+            item_id=line.item_id,
+            item_name=line.item.name,
+            role=line.role,
+            planned_qty=line.planned_qty,
+            actual_qty=line.actual_qty,
+            actual_value=actual_values.get(line.item_id, Decimal("0.00")),
+            standard_rate=standard_rates.get(line.item_id, Decimal("0.0000")),
+        )
+        for line in run_lines
+    ]
+
+    from apps.costing.services import run_cost_sheet
+
+    sheet = run_cost_sheet(run)
+    selling_price = sheet["selling_price"]
+
+    return build_report_card(
+        lines=inputs,
+        planned_output=run.planned_output_qty,
+        good_packets=run.good_packets or Decimal("0"),
+        damaged_pouches=run.damaged_pouches or Decimal("0"),
+        overhead_value=Decimal(str(sheet["overhead_value"])),
+        selling_price=None if selling_price is None else Decimal(str(selling_price)),
+    )
+
+
+def trailing_yield_factor(product: Item, *, run_limit: int = TRAILING_YIELD_RUNS) -> Decimal:
+    """Return realised yield (good / planned) over the product's last completed runs.
+
+    Defaults to 1 when the product has no completed run yet, so a first batch is
+    planned at its BOM output rather than an invented factor.
+    """
+    runs = list(
+        ProductionRun.objects.filter(state=RunState.COMPLETED, product=product).order_by(
+            "-completed_at", "-pk"
+        )[:run_limit]
+    )
+    planned = sum((run.planned_output_qty for run in runs), Decimal("0.000"))
+    good = sum((run.good_packets or Decimal("0.000") for run in runs), Decimal("0.000"))
+    if planned <= 0 or good <= 0:
+        return Decimal("1.0000")
+    return q4(good / planned)
+
+
+def leakage_trends(product: Item, *, run_limit: int = 8) -> dict[str, object]:
+    """Return per-input variance trends and drift alerts for a product.
+
+    Trends read stored variance snapshots, oldest run first, so a later BOM
+    change cannot rewrite the sparkline. Drift uses the pure rule in
+    ``leakage.detect_drift`` with the current settings tolerance.
+    """
+    runs = list(
+        ProductionRun.objects.filter(state=RunState.COMPLETED, product=product).order_by(
+            "-completed_at", "-pk"
+        )[:run_limit]
+    )
+    runs.reverse()
+    run_ids = [run.pk for run in runs]
+    snapshots = list(
+        RunVarianceSnapshot.objects.filter(
+            run_id__in=run_ids,
+            kind=VarianceKind.USAGE,
+        ).order_by("pk")
+    )
+
+    series: dict[str, list[VariancePoint]] = {}
+    for snapshot in snapshots:
+        series.setdefault(snapshot.item_name, []).append(
+            VariancePoint(
+                run_id=snapshot.run_id,
+                variance_pct=snapshot.variance_pct,
+                direction=snapshot.direction,
+            )
+        )
+
+    tolerance = variance_tolerance()
+    ingredients: list[dict[str, object]] = []
+    alerts: list[DriftAlert] = []
+    for item_name, points in series.items():
+        alert = detect_drift(item_name, points, tolerance)
+        if alert is not None:
+            alerts.append(alert)
+        ingredients.append(
+            {
+                "item_name": item_name,
+                "points": [
+                    {
+                        "run_id": point.run_id,
+                        "variance_pct": point.variance_pct,
+                        "direction": point.direction,
+                    }
+                    for point in points
+                ],
+            }
+        )
+
+    return {
+        "product_id": product.pk,
+        "product_name": product.name,
+        "runs": [
+            {
+                "run_id": run.pk,
+                "completed_at": timezone.localtime(run.completed_at).isoformat()
+                if run.completed_at
+                else None,
+            }
+            for run in runs
+        ],
+        "ingredients": ingredients,
+        "drift_alerts": [
+            {
+                "item_name": alert.item_name,
+                "consecutive_runs": alert.consecutive_runs,
+                "latest_variance_pct": alert.latest_variance_pct,
+                "threshold": alert.threshold,
+                "direction": alert.direction,
+            }
+            for alert in alerts
+        ],
+        "tolerance": tolerance,
+    }
+
+
+def _month_start(day: date) -> date:
+    return date(day.year, day.month, 1)
+
+
+def leakage_summary(*, today: date | None = None) -> dict[str, object]:
+    """Return this month's adverse leakage in rupees and the top three culprits.
+
+    Leakage is the sum of positive price and usage impacts across completed
+    runs this month plus the standard cost of missing packets (yield). It is a
+    deterministic sum over stored rows, not an estimate.
+    """
+    business_day = today or timezone.localdate(timezone.now(), INDIA)
+    start_local = datetime.combine(_month_start(business_day), time.min, tzinfo=INDIA)
+    runs = (
+        ProductionRun.objects.select_related("product")
+        .filter(state=RunState.COMPLETED, completed_at__gte=start_local)
+        .order_by("-completed_at", "-pk")
+    )
+
+    total = Decimal("0.00")
+    by_culprit: dict[str, Decimal] = {}
+    for run in runs:
+        card = run_report_card(run)
+        yield_gap = card.yield_gap
+        if yield_gap.gap_packets > 0:
+            yield_impact = q2(card.standard_per_packet * yield_gap.gap_packets)
+            if yield_impact > 0:
+                total += yield_impact
+                by_culprit["Yield shortfall"] = (
+                    by_culprit.get("Yield shortfall", Decimal("0.00")) + yield_impact
+                )
+        for line in card.lines:
+            if line.total_impact > 0:
+                total += line.total_impact
+                by_culprit[line.item_name] = (
+                    by_culprit.get(line.item_name, Decimal("0.00")) + line.total_impact
+                )
+
+    top = sorted(by_culprit.items(), key=lambda row: (-row[1], row[0]))[:3]
+    return {
+        "period": _month_start(business_day).isoformat(),
+        "amount": q2(total),
+        "runs": len(list(runs)),
+        "top_culprits": [{"label": label, "amount": q2(amount)} for label, amount in top],
+    }
