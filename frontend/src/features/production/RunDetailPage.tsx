@@ -14,6 +14,7 @@ import {
 } from './productionApi'
 import CostSheetPanel from '../costing/CostSheetPanel'
 import { formatPct, previewVariance, type VariancePreview } from './variance'
+import { SkeletonDetailPage } from '../../components/Skeleton'
 
 function apiErrorMessage(error: unknown, fallback: string): string {
   const detail = (error as { response?: { data?: { detail?: string; code?: string } } })?.response
@@ -163,7 +164,7 @@ export default function RunDetailPage() {
     onError: onFailure(t('production.amend.error'))
   })
 
-  if (isLoading) return <p className="p-6 text-gray-500">{t('production.loading')}</p>
+  if (isLoading) return <SkeletonDetailPage label={t('production.loading')} />
   if (isError || !run)
     return (
       <p role="alert" className="p-6 text-red-700">

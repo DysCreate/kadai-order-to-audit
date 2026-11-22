@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { formatMoney } from '../../lib/money'
+import { LoadingPanel, SkeletonCardList } from '../../components/Skeleton'
 import { listInvoices } from './salesApi'
 
 export default function InvoiceListPage() {
@@ -16,7 +17,11 @@ export default function InvoiceListPage() {
       <h2 className="text-2xl font-semibold text-gray-800">{t('sales.invoices.title')}</h2>
       <p className="mt-1 text-sm text-gray-500">{t('sales.invoices.subtitle')}</p>
 
-      {isLoading && <p className="mt-6 text-gray-500">{t('sales.loading')}</p>}
+      {isLoading && (
+        <LoadingPanel label={t('sales.loading')} className="mt-6">
+          <SkeletonCardList count={3} />
+        </LoadingPanel>
+      )}
       {isError && (
         <p role="alert" className="mt-6 text-red-700">
           {t('sales.invoices.loadError')}

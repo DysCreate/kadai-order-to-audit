@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { apiErrorMessage } from '../../lib/apiError'
+import { LoadingPanel, SkeletonText } from '../../components/Skeleton'
 import { formatMoney } from '../../lib/money'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -61,7 +62,12 @@ export default function CostSheetPanel({ runId }: { runId: number }) {
     onError: (failure: unknown) => setError(apiErrorMessage(failure, t('costing.addError')))
   })
 
-  if (sheet.isLoading) return <p className="p-2 text-gray-500">{t('costing.loading')}</p>
+  if (sheet.isLoading)
+    return (
+      <LoadingPanel label={t('costing.loading')} className="p-2">
+        <SkeletonText lines={5} />
+      </LoadingPanel>
+    )
   if (sheet.isError || !sheet.data)
     return (
       <p role="alert" className="p-2 text-red-700">

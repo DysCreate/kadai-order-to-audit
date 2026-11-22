@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { apiErrorMessage } from '../../lib/apiError'
 import { formatMoney } from '../../lib/money'
+import { LoadingPanel, SkeletonCardList, SkeletonText } from '../../components/Skeleton'
 import {
   approveOrder,
   createInvoice,
@@ -135,7 +136,13 @@ export default function AdminOrderInboxPage() {
 
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
         <ul className="space-y-3">
-          {orders.isLoading && <li className="text-gray-500">{t('sales.loading')}</li>}
+          {orders.isLoading && (
+            <li>
+              <LoadingPanel label={t('sales.loading')}>
+                <SkeletonCardList count={3} />
+              </LoadingPanel>
+            </li>
+          )}
           {orders.data && orders.data.length === 0 && (
             <li className="text-gray-500">{t('sales.inbox.empty')}</li>
           )}
@@ -292,6 +299,11 @@ export default function AdminOrderInboxPage() {
               </table>
             </div>
 
+            {coverage.isLoading && (
+              <LoadingPanel label={t('common.loading')}>
+                <SkeletonText lines={2} />
+              </LoadingPanel>
+            )}
             {coverage.data && (
               <div className="rounded-md bg-gray-50 p-3 text-sm">
                 <div className="font-medium text-gray-800">

@@ -61,7 +61,7 @@ Then open http://localhost:3000
 | Production loop (BOM, purchases, runs, variance, amend) | ✅ Phase 2 |
 | Sales loop (orders, invoices, dispatch, credit notes, payments) | ✅ Phase 3 |
 | Costing (overheads, cost sheet, FG cost and margin) | ✅ Phase 4 |
-| Reports | 🚧 Phase 5 |
+| Reports, exports, reconciliation and owner dashboard | ✅ Phase 5 |
 | Leakage Radar | 🚧 Phase 6 |
 | Offline PWA | 🚧 Phase 7 |
 
@@ -143,6 +143,24 @@ The completed-run screen at `/production/runs/<id>` now carries the cost sheet:
 materials by input, overheads, run total, cost per good packet, selling price,
 margin and the current finished-goods weighted-average cost. Production, admin
 and owner can add labour, gas/power or other overheads from the same screen.
+
+## Phase 5 Reports API
+
+| Method | Path | Allowed roles |
+|--------|------|---------------|
+| GET | `/api/reports/` | admin, production, accountant, owner |
+| GET | `/api/reports/<slug>/?date_from=&date_to=&format=json\|csv\|excel\|pdf` | admin, production, accountant, owner |
+| GET | `/api/reports/reconciliation/?date_from=&date_to=` | admin, production, accountant, owner |
+| GET | `/api/reports/dashboard/` | admin, accountant, owner |
+
+The report console lives at `/reports` and the owner dashboard at `/`. The ten
+reports are the sales register, sales by customer, sales by product, GST summary
+(GSTR-1 shaped, with a GSTR-3B outward-supply figure), purchase register, stock
+summary, stock ledger, production report, collections and outstanding/ageing.
+Every report accepts a business-date range and exports to CSV, Excel and PDF
+from the same rows the screen shows. Reconciliation runs three checks: every
+stock balance equals its ledger sum, every invoice total equals its line sum,
+and the sales register's taxable total equals the GST summary's taxable total.
 
 ## Sales loop
 
@@ -238,6 +256,29 @@ Phase 4 adds these costing readings:
 14. **Margin uses the default price list.** The cost sheet compares cost per
     packet with the default selling price; if no price is configured, the
     margin is null rather than invented.
+
+Phase 5 adds these reporting readings:
+
+15. **Reports filter on the business date.** Sales use the invoice date,
+    purchases the purchase date, collections the payment date, production the
+    completion date and the ledger its entry date. The stock summary is a live
+    balance and the ageing report is "as of" the end date (today by default),
+    so both say so in their metadata.
+16. **The sales register is gross and shows cancellations.** A fully credited
+    invoice stays visible with status `cancelled`; credit notes are reported
+    separately in the GST summary. Reconciliation compares the register's
+    invoice taxable total with the B2B plus B2C taxable totals, and the
+    GSTR-3B outward-supply figure is net of credit notes.
+17. **Reorder lines come from the BOM.** A raw or packaging item is flagged
+    when on-hand stock is below one batch's BOM requirement; finished goods
+    are flagged only at zero. This avoids inventing a reorder-level master
+    field before Phase 7.
+18. **The dashboard's "today" is the Asia/Kolkata business day.** Timestamps
+    stay in UTC; the day bounds are converted to IST before counting orders.
+19. **Reports are staff-only.** Admin, production, accountant and owner may
+    read reports; the salesman is denied because the reports aggregate other
+    salesmen's orders. The accountant remains read-only, and the dashboard is
+    limited to admin, accountant and owner.
 
 ## Benchmark Results
 

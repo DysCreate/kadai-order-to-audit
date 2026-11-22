@@ -1,4 +1,12 @@
 {
+  "common": {
+    "loading": "Loading…"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "subtitle": "The page you were looking for does not exist or has moved.",
+    "home": "Go to home"
+  },
   "login": {
     "title": "Sign In",
     "username": "Username",
@@ -14,6 +22,9 @@
     "invoices": "Invoices",
     "payments": "Payments",
     "production": "Production",
+    "reports": "Reports",
+    "primary": "Primary",
+    "skipToContent": "Skip to main content",
     "logout": "Sign Out",
     "welcome": "Welcome to Kadai order-to-audit system."
   },
@@ -258,6 +269,54 @@
     "scopes": {
       "RUN": "Run",
       "MONTH": "Monthly pool"
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Today's orders, stock cover, variance alerts, cost per packet and money due.",
+    "loading": "Loading dashboard…",
+    "loadError": "Could not load the dashboard.",
+    "todayOrders": "Today's orders",
+    "openOrders": "Open orders",
+    "openHint": "{{submitted}} submitted · {{approved}} approved",
+    "outstanding": "Outstanding dues",
+    "customersDue": "{{count}} customer(s) owe money",
+    "reorderLines": "Reorder lines",
+    "reorderHint": "Below one batch of stock",
+    "costPerPacket": "Cost per packet",
+    "margin": "Margin {{margin}} per packet ({{pct}}%)",
+    "noCost": "No completed run yet.",
+    "varianceAlerts": "Variance alerts",
+    "noAlerts": "No flagged variance in the last 30 days.",
+    "stock": "Stock levels",
+    "item": "Item",
+    "type": "Type",
+    "qty": "On hand",
+    "value": "Value",
+    "status": "Cover",
+    "reorder": "Reorder {{qty}}",
+    "ok": "OK"
+  },
+  "reports": {
+    "title": "Reports",
+    "subtitle": "Pick a report and a date range, then export the same figures to CSV, Excel or PDF.",
+    "report": "Report",
+    "from": "From",
+    "to": "To",
+    "csv": "CSV",
+    "excel": "Excel",
+    "pdf": "PDF",
+    "loading": "Loading report…",
+    "loadError": "Could not load the report.",
+    "empty": "No rows in this period.",
+    "total": "Total",
+    "reconciliation": "Reconciliation",
+    "reconciliationHint": "The same audit checks `make reconcile` runs: stock equals the ledger, invoice totals equal their lines, and the sales register agrees with the GST summary.",
+    "meta": {
+      "as_of": "As of",
+      "invoices": "Invoices",
+      "note": "Note",
+      "credit_note_taxable": "Credit-note taxable"
     }
   }
 }

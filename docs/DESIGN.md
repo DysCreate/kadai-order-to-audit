@@ -292,6 +292,46 @@ the benchmark would show under alternatives; they are not implemented.
 | A17 | Monthly pools are allocated by `batches × standard_batch_hours` across completed runs in the Asia/Kolkata month, using a largest-remainder paise split; allocation is idempotent per entry and run. |
 | A18 | Cost per good packet = (net materials + overheads) / good packets. FG weighted-average cost is a separate current-stock view. |
 | A19 | Margin uses the default selling price; when no price is configured the margin is null. |
+| A20 | Reports filter on business dates; the stock summary is live and ageing is as of the end date (today by default). |
+| A21 | The sales register is gross: a fully credited invoice stays listed as cancelled. GST reconciliation compares gross invoice taxable totals; GSTR-3B outward supply is net of credit notes. |
+| A22 | Dashboard reorder flags use one batch's BOM requirement for raw/packaging items and zero stock for finished goods, ahead of a reorder-level master field. |
+| A23 | Dashboard "today" is the Asia/Kolkata business day; timestamps remain UTC. |
+| A24 | Admin, production, accountant and owner may read reports; the salesman may not. The accountant stays read-only. |
+
+---
+
+## Reports and reconciliation
+
+Reports are data first: each query returns a `ReportResult` (columns, rows,
+totals, metadata) and the JSON response, CSV, Excel workbook and PDF are all
+rendered from that one object. A downloaded file therefore cannot disagree
+with the screen it came from. Money is always a `Decimal` formatted with two
+places; the Excel renderer writes numeric cells, not strings.
+
+The ten reports are the sales register, sales by customer, sales by product,
+GST summary (GSTR-1 shaped: B2B, B2C, HSN, credit notes, documents issued),
+purchase register, stock summary, stock ledger, production report, collections
+and outstanding/ageing. Sales, purchases, collections, production and the
+ledger filter on their business dates; the stock summary is a live balance and
+ageing is "as of" a date.
+
+```
+GET /api/reports/<slug>/?date_from=2026-05-01&date_to=2026-05-31&format=csv
+```
+
+Three audit checks back `make reconcile`:
+
+| Check | Expectation |
+|-------|-------------|
+| Stock | Every `stock_balance` equals its `SUM(stock_ledger)` |
+| Invoice | Every invoice `total` equals the sum of its `line_total` |
+| GST | Sales-register taxable total equals the GST summary taxable total |
+
+The owner dashboard reads the same sources, never a second set of books:
+today's orders (Asia/Kolkata day bounds), open orders, stock with reorder
+flags, the last 30 days' flagged variance, the latest completed run's cost per
+packet and total outstanding dues. A reorder flag means raw or packaging stock
+is below one batch's BOM requirement; finished goods flag only at zero.
 
 ---
 
