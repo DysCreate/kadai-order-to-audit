@@ -143,6 +143,45 @@ class TaxSummarySerializer(serializers.Serializer[Any]):
     total = serializers.DecimalField(max_digits=14, decimal_places=2)
 
 
+class CapacityRowSerializer(serializers.Serializer[Any]):
+    """How many whole batches one input's stock allows."""
+
+    item_id = serializers.IntegerField()
+    item_name = serializers.CharField()
+    uom = serializers.CharField()
+    qty_per_batch = serializers.DecimalField(max_digits=14, decimal_places=3)
+    stock_qty = serializers.DecimalField(max_digits=14, decimal_places=3)
+    batches_available = serializers.IntegerField()
+    ratio = serializers.DecimalField(max_digits=14, decimal_places=4)
+    limiting = serializers.BooleanField()
+
+
+class PurchaseSuggestionSerializer(serializers.Serializer[Any]):
+    """A draft purchase quantity for one short input."""
+
+    item_id = serializers.IntegerField()
+    item_name = serializers.CharField()
+    uom = serializers.CharField()
+    qty = serializers.DecimalField(max_digits=14, decimal_places=3)
+
+
+class LoopCloserSerializer(serializers.Serializer[Any]):
+    """The shortage-to-production plan for one finished-goods line."""
+
+    product_id = serializers.IntegerField()
+    product_name = serializers.CharField()
+    shortage_qty = serializers.DecimalField(max_digits=14, decimal_places=3)
+    batch_output_qty = serializers.DecimalField(max_digits=14, decimal_places=3)
+    yield_factor = serializers.DecimalField(max_digits=14, decimal_places=4)
+    batches_needed = serializers.IntegerField()
+    batches_allowed = serializers.IntegerField()
+    feasible = serializers.BooleanField()
+    limiting_item = serializers.CharField()
+    capacity = CapacityRowSerializer(many=True)
+    purchase_list = PurchaseSuggestionSerializer(many=True)
+    verdict = serializers.CharField()
+
+
 class OrderCoverageSerializer(serializers.Serializer[Any]):
     """Per-line stock coverage plus the GST preview for an order."""
 
@@ -150,6 +189,7 @@ class OrderCoverageSerializer(serializers.Serializer[Any]):
     total_shortage_qty = serializers.DecimalField(max_digits=14, decimal_places=3)
     is_interstate = serializers.BooleanField()
     tax_preview = TaxSummarySerializer()
+    loop_closers = LoopCloserSerializer(many=True)
 
     def to_representation(self, instance: OrderCoverage) -> dict[str, Any]:
         return {
@@ -157,6 +197,7 @@ class OrderCoverageSerializer(serializers.Serializer[Any]):
             "total_shortage_qty": str(instance.total_shortage_qty),
             "is_interstate": instance.is_interstate,
             "tax_preview": TaxSummarySerializer(instance.tax_preview).data,
+            "loop_closers": LoopCloserSerializer(instance.loop_closers, many=True).data,
         }
 
 

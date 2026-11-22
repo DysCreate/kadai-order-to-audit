@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { apiErrorMessage } from '../../lib/apiError'
 import { formatMoney } from '../../lib/money'
+import { Skeleton, SkeletonText } from '../../components/Skeleton'
 import {
   getAgeing,
   getCustomerLedger,
@@ -128,12 +129,17 @@ export default function PaymentsPage() {
           <section className="mt-6 grid gap-3 sm:grid-cols-2">
             <div className="rounded-lg border border-gray-200 bg-white p-4">
               <div className="text-sm text-gray-500">{t('payments.outstanding')}</div>
-              <div className="text-3xl font-semibold text-gray-900">
-                {outstanding.data ? formatMoney(outstanding.data.outstanding) : '—'}
-              </div>
+              {outstanding.isLoading ? (
+                <Skeleton className="mt-2 h-9 w-36" />
+              ) : (
+                <div className="text-3xl font-semibold text-gray-900">
+                  {outstanding.data ? formatMoney(outstanding.data.outstanding) : '—'}
+                </div>
+              )}
             </div>
             <div className="rounded-lg border border-gray-200 bg-white p-4">
               <div className="text-sm text-gray-500">{t('payments.ageing')}</div>
+              {ageing.isLoading && <SkeletonText lines={3} className="mt-1" />}
               <ul className="mt-1 space-y-1 text-sm">
                 {(ageing.data?.buckets ?? []).map((bucket) => (
                   <li key={bucket.label} className="flex justify-between">
@@ -221,7 +227,7 @@ export default function PaymentsPage() {
                     />
                   </li>
                 ))}
-                {openInvoices.length === 0 && (
+                {!ledger.isLoading && openInvoices.length === 0 && (
                   <li className="py-2 text-sm text-gray-500">{t('payments.noOpenInvoices')}</li>
                 )}
               </ul>
@@ -263,24 +269,35 @@ export default function PaymentsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {(ledger.data?.invoices ?? []).map((invoice) => (
-                    <tr key={invoice.invoice_id}>
-                      <td className="px-3 py-2 font-medium text-gray-900">{invoice.number}</td>
-                      <td className="px-3 py-2 text-gray-700">{invoice.invoice_date}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-700">
-                        {formatMoney(invoice.total)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-700">
-                        {formatMoney(invoice.paid)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-900">
-                        {formatMoney(invoice.outstanding)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-gray-700">
-                        {invoice.age_days}
-                      </td>
-                    </tr>
-                  ))}
+                  {ledger.isLoading &&
+                    Array.from({ length: 3 }, (_, row) => (
+                      <tr key={row}>
+                        {Array.from({ length: 6 }, (_, column) => (
+                          <td key={column} className="px-3 py-2">
+                            <Skeleton className="h-4 w-full" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  {!ledger.isLoading &&
+                    (ledger.data?.invoices ?? []).map((invoice) => (
+                      <tr key={invoice.invoice_id}>
+                        <td className="px-3 py-2 font-medium text-gray-900">{invoice.number}</td>
+                        <td className="px-3 py-2 text-gray-700">{invoice.invoice_date}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-700">
+                          {formatMoney(invoice.total)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-700">
+                          {formatMoney(invoice.paid)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-900">
+                          {formatMoney(invoice.outstanding)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-700">
+                          {invoice.age_days}
+                        </td>
+                      </tr>
+                    ))}
                 </tbody>
               </table>
             </div>
@@ -307,7 +324,7 @@ export default function PaymentsPage() {
                   )}
                 </li>
               ))}
-              {(ledger.data?.payments ?? []).length === 0 && (
+              {!ledger.isLoading && (ledger.data?.payments ?? []).length === 0 && (
                 <li className="text-gray-500">{t('sales.invoice.none')}</li>
               )}
             </ul>

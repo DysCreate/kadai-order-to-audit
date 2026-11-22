@@ -82,3 +82,100 @@ export async function amendRun(id: number, reason: string): Promise<ProductionRu
   const res = await apiClient.post<ProductionRun>(`/production/runs/${id}/amend/`, { reason })
   return res.data
 }
+
+export interface ReportCardLine {
+  item_id: number
+  item_name: string
+  role: RunLineRole
+  planned_qty: string
+  actual_qty: string
+  standard_rate: string
+  actual_rate: string
+  standard_value: string
+  actual_value: string
+  price_impact: string
+  usage_impact: string
+  total_impact: string
+}
+
+export interface BridgeStep {
+  key: 'standard_material' | 'yield_shortfall' | 'price_usage' | 'overhead'
+  label: string
+  amount: string
+  cumulative: string
+}
+
+export interface YieldGap {
+  planned_packets: string
+  good_packets: string
+  gap_packets: string
+  damaged_packets: string
+  unexplained_packets: string
+}
+
+export interface ReportCard {
+  lines: ReportCardLine[]
+  standard_materials: string
+  actual_materials: string
+  price_impact: string
+  usage_impact: string
+  material_impact: string
+  planned_packets: string
+  good_packets: string
+  overhead_value: string
+  standard_per_packet: string
+  actual_material_per_packet: string
+  overhead_per_packet: string
+  cost_per_packet: string
+  bridge: BridgeStep[]
+  yield_gap: YieldGap
+  selling_price: string | null
+  margin_per_packet: string | null
+  margin_pct: string | null
+}
+
+export interface VariancePoint {
+  run_id: number
+  variance_pct: string | null
+  direction: VarianceDirection
+}
+
+export interface IngredientTrend {
+  item_name: string
+  points: VariancePoint[]
+}
+
+export interface DriftAlert {
+  item_name: string
+  consecutive_runs: number
+  latest_variance_pct: string | null
+  threshold: string
+  direction: VarianceDirection
+}
+
+export interface LeakageTrends {
+  product_id: number
+  product_name: string
+  runs: { run_id: number; completed_at: string | null }[]
+  ingredients: IngredientTrend[]
+  drift_alerts: DriftAlert[]
+  tolerance: string
+}
+
+export async function getRunReportCard(id: number): Promise<ReportCard> {
+  const res = await apiClient.get<ReportCard>(`/production/runs/${id}/report-card/`)
+  return res.data
+}
+
+export async function getProductLeakage(id: number): Promise<LeakageTrends> {
+  const res = await apiClient.get<LeakageTrends>(`/production/products/${id}/leakage/`)
+  return res.data
+}
+
+export async function createRun(productId: number, batches: string): Promise<ProductionRun> {
+  const res = await apiClient.post<ProductionRun>('/production/runs/', {
+    product: productId,
+    batches
+  })
+  return res.data
+}

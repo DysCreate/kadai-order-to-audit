@@ -24,7 +24,9 @@ from .models import ProductionRun
 from .serializers import (
     BOMCreateSerializer,
     BOMSerializer,
+    LeakageTrendsSerializer,
     ProductionRunSerializer,
+    ReportCardSerializer,
     RunAmendSerializer,
     RunCompleteSerializer,
     RunCreateSerializer,
@@ -37,8 +39,10 @@ from .services import (
     create_bom_version,
     create_run,
     issue_run,
+    leakage_trends,
     list_boms,
     production_runs,
+    run_report_card,
 )
 
 READ_ROLES: tuple[str, ...] = (Role.PRODUCTION, Role.ADMIN, Role.ACCOUNTANT, Role.OWNER)
@@ -92,6 +96,7 @@ class BOMCollectionView(ProductionAPIView):
                     item_id=line["item"].pk,
                     qty_per_batch=line["qty_per_batch"],
                     role=line["role"],
+                    standard_rate=line["standard_rate"],
                 )
                 for line in serializer.validated_data["lines"]
             ],
@@ -164,3 +169,18 @@ class RunAmendView(ProductionAPIView):
             user=request.user,
         )
         return Response(ProductionRunSerializer(run).data)
+
+
+class RunReportCardView(ProductionAPIView):
+    """GET /api/production/runs/<id>/report-card/ – the Leakage Radar card."""
+
+    def get(self, request: Request, pk: int) -> Response:
+        return Response(ReportCardSerializer(run_report_card(self._run(pk))).data)
+
+
+class ProductLeakageView(ProductionAPIView):
+    """GET /api/production/products/<id>/leakage/ – trends and drift alerts."""
+
+    def get(self, request: Request, pk: int) -> Response:
+        product = get_object_or_404(Item, pk=pk)
+        return Response(LeakageTrendsSerializer(leakage_trends(product)).data)

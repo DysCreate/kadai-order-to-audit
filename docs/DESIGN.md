@@ -269,6 +269,83 @@ the benchmark would show under alternatives; they are not implemented.
 
 ---
 
+## Leakage Radar
+
+The Leakage Radar turns production variance into money. It is pure arithmetic
+in `apps/production/leakage.py`; the service layer only loads stored rows.
+
+### Run Report Card
+
+Each BOM line carries a `standard_rate` snapshot (NUMERIC(14,4)) taken when that
+BOM version was created. For a completed run:
+
+```
+standard value  = planned qty x standard rate
+price impact    = actual value - q2(actual qty x standard rate)
+usage impact    = q2(actual qty x standard rate) - standard value
+actual value    = net value of the run's input ledger rows
+```
+
+Price plus usage therefore equals actual minus standard exactly. The card also
+shows the material total (3,970 standard versus 4,055 actual, +85 impact in the
+benchmark) and the margin at the default selling price.
+
+### Cost-per-packet bridge
+
+The bridge is built from rounded cumulative values, so it always adds up:
+
+| Step | Benchmark |
+| --- | --- |
+| Standard material per planned packet | 19.85 |
+| Yield shortfall (188 good vs 200 planned) | +1.27 |
+| Net price and usage variance | +0.45 |
+| Overhead (labour + power / 188) | +9.57 |
+| Cost per good packet | 31.14 |
+
+### Yield gap and drift
+
+The gap is `planned - good packets`. Recorded damaged pouches explain the gap up
+to its size; the remainder is reported as unexplained. The benchmark's 12
+missing packets are 6 recorded damaged and 6 unexplained.
+
+Drift is a leading indicator, not a second variance flag: the same input is
+adverse beyond half the tolerance on three consecutive completed runs. Trends
+and alerts read stored snapshots, so history is stable.
+
+The owner dashboard's "Leakage this month" tile sums only adverse money: the
+positive price and usage impacts plus the standard cost of missing packets.
+Favourable lines do not net it down, matching the plan's definition, and the
+top three culprits are named beside the amount.
+
+## Loop Closer
+
+The order screen joins the sales loop back to production when a finished-goods
+line is short:
+
+```
+effective batch output = BOM batch output x trailing yield factor
+batches needed         = ceil(shortage / effective batch output)
+batches allowed        = min over BOM inputs floor(stock / qty per batch)
+capacity ratio         = stock / qty per batch
+```
+
+The trailing yield factor is realised output over the last five completed runs
+of the product (188 / 200 = 0.94 in the benchmark). The limiting item is the
+smallest capacity ratio: pouches at 1.53 batches, versus oil 1.95, cartons
+2.10, flour 3.00 and spice mix 3.17. The benchmark needs one batch and stock
+allows one, so the verdict is feasible with no purchase. When stock cannot
+cover the need, the panel lists a ceiling-rounded draft purchase per short
+input (never under-ordering) and offers a one-click planned production run.
+
+## Benchmark Console
+
+The console (`apps/benchmark/scenario.py`) replays Appendix A steps 1-9 through
+the same services the API uses, then compares every expected value with the
+actual. It runs inside a transaction that is rolled back, so an admin can press
+Run on a live database and nothing changes. `make benchmark` runs the same
+scenario from the command line and exits non-zero on any mismatch; the admin
+page at `/benchmark` shows the same PASS/FAIL table.
+
 ## Assumptions (from Appendix A)
 
 | # | Assumption |
@@ -292,6 +369,53 @@ the benchmark would show under alternatives; they are not implemented.
 | A17 | Monthly pools are allocated by `batches × standard_batch_hours` across completed runs in the Asia/Kolkata month, using a largest-remainder paise split; allocation is idempotent per entry and run. |
 | A18 | Cost per good packet = (net materials + overheads) / good packets. FG weighted-average cost is a separate current-stock view. |
 | A19 | Margin uses the default selling price; when no price is configured the margin is null. |
+| A20 | Reports filter on business dates; the stock summary is live and ageing is as of the end date (today by default). |
+| A21 | The sales register is gross: a fully credited invoice stays listed as cancelled. GST reconciliation compares gross invoice taxable totals; GSTR-3B outward supply is net of credit notes. |
+| A22 | Dashboard reorder flags use one batch's BOM requirement for raw/packaging items and zero stock for finished goods, ahead of a reorder-level master field. |
+| A23 | Dashboard "today" is the Asia/Kolkata business day; timestamps remain UTC. |
+| A24 | Admin, production, accountant and owner may read reports; the salesman may not. The accountant stays read-only. |
+| A25 | Standard cost is snapshotted per BOM version on `production_bom_line.standard_rate`; later BOM versions and purchases never rewrite a past run's standard. |
+| A26 | Price impact = actual value − q2(actual qty × standard rate); usage impact = that value − standard value. The split always sums to actual − standard. |
+| A27 | The cost-per-packet bridge uses rounded cumulative values so its steps add exactly to cost per good packet. |
+| A28 | Recorded damaged pouches explain the yield gap only up to the gap's size; any excess is not double counted. |
+| A29 | Drift = adverse beyond half the tolerance on three consecutive completed runs; it is a warning alongside, not instead of, the hard variance flag. |
+| A30 | Loop Closer uses the trailing yield over the last five completed runs (1.0 when none exist), the minimum whole batches across BOM inputs, and a ceiling-rounded purchase list only when the need exceeds stock. |
+| A31 | The Benchmark Console runs in a rolled-back transaction; it never leaves benchmark data in live books. |
+
+---
+
+## Reports and reconciliation
+
+Reports are data first: each query returns a `ReportResult` (columns, rows,
+totals, metadata) and the JSON response, CSV, Excel workbook and PDF are all
+rendered from that one object. A downloaded file therefore cannot disagree
+with the screen it came from. Money is always a `Decimal` formatted with two
+places; the Excel renderer writes numeric cells, not strings.
+
+The ten reports are the sales register, sales by customer, sales by product,
+GST summary (GSTR-1 shaped: B2B, B2C, HSN, credit notes, documents issued),
+purchase register, stock summary, stock ledger, production report, collections
+and outstanding/ageing. Sales, purchases, collections, production and the
+ledger filter on their business dates; the stock summary is a live balance and
+ageing is "as of" a date.
+
+```
+GET /api/reports/<slug>/?date_from=2026-05-01&date_to=2026-05-31&format=csv
+```
+
+Three audit checks back `make reconcile`:
+
+| Check | Expectation |
+|-------|-------------|
+| Stock | Every `stock_balance` equals its `SUM(stock_ledger)` |
+| Invoice | Every invoice `total` equals the sum of its `line_total` |
+| GST | Sales-register taxable total equals the GST summary taxable total |
+
+The owner dashboard reads the same sources, never a second set of books:
+today's orders (Asia/Kolkata day bounds), open orders, stock with reorder
+flags, the last 30 days' flagged variance, the latest completed run's cost per
+packet and total outstanding dues. A reorder flag means raw or packaging stock
+is below one batch's BOM requirement; finished goods flag only at zero.
 
 ---
 

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { apiErrorMessage } from '../../lib/apiError'
 import { formatMoney } from '../../lib/money'
+import { LoadingPanel, SkeletonCardList } from '../../components/Skeleton'
 import {
   createOrder,
   listCustomers,
@@ -188,6 +189,11 @@ export default function NewOrderPage() {
             <p className="text-xs text-gray-500">{t('sales.order.recentsHint')}</p>
           )}
           <div className="grid gap-2">
+            {customers.isLoading && (
+              <LoadingPanel label={t('sales.loading')}>
+                <SkeletonCardList count={2} />
+              </LoadingPanel>
+            )}
             {filteredCustomers.map((customer) => {
               const active = customer.id === customerId
               return (
@@ -220,7 +226,11 @@ export default function NewOrderPage() {
         {selectedCustomer && (
           <section className="space-y-3">
             <h3 className="text-lg font-semibold text-gray-800">{t('sales.order.products')}</h3>
-            {items.isLoading && <p className="text-sm text-gray-500">{t('sales.loading')}</p>}
+            {items.isLoading && (
+              <LoadingPanel label={t('sales.loading')}>
+                <SkeletonCardList count={3} />
+              </LoadingPanel>
+            )}
             {items.data && items.data.length === 0 && (
               <p className="text-sm text-gray-500">{t('sales.order.noProducts')}</p>
             )}

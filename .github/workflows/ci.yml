@@ -62,6 +62,15 @@ jobs:
           DATABASE_URL: postgresql://kadai:kadai_test@localhost:5432/kadai_test
           SECRET_KEY: ci-test-secret-key
 
+      - name: Benchmark Console
+        run: |
+          python manage.py migrate --noinput
+          python manage.py run_benchmark
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.test
+          DATABASE_URL: postgresql://kadai:kadai_test@localhost:5432/kadai_test
+          SECRET_KEY: ci-test-secret-key
+
       - name: Security – Bandit
         run: pip install bandit && bandit -r apps/ core/ -ll
 

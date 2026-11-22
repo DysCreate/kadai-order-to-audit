@@ -81,11 +81,45 @@ export interface CoverageLine {
   shortage_qty: string
 }
 
+export interface CapacityRow {
+  item_id: number
+  item_name: string
+  uom: string
+  qty_per_batch: string
+  stock_qty: string
+  batches_available: number
+  ratio: string
+  limiting: boolean
+}
+
+export interface PurchaseSuggestion {
+  item_id: number
+  item_name: string
+  uom: string
+  qty: string
+}
+
+export interface LoopCloser {
+  product_id: number
+  product_name: string
+  shortage_qty: string
+  batch_output_qty: string
+  yield_factor: string
+  batches_needed: number
+  batches_allowed: number
+  feasible: boolean
+  limiting_item: string
+  capacity: CapacityRow[]
+  purchase_list: PurchaseSuggestion[]
+  verdict: 'feasible' | 'purchase_needed' | 'insufficient_stock' | 'nothing_to_produce'
+}
+
 export interface OrderCoverage {
   lines: CoverageLine[]
   total_shortage_qty: string
   is_interstate: boolean
   tax_preview: TaxPreview
+  loop_closers: LoopCloser[]
 }
 
 export interface InvoiceLine {

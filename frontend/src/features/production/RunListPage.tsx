@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
+import { LoadingPanel, SkeletonCardList } from '../../components/Skeleton'
 import { listRuns, type RunState } from './productionApi'
 
 const STATE_STYLES: Record<RunState, string> = {
@@ -21,7 +22,11 @@ export default function RunListPage() {
       <h2 className="text-2xl font-semibold text-gray-800">{t('production.title')}</h2>
       <p className="mt-1 text-sm text-gray-500">{t('production.subtitle')}</p>
 
-      {isLoading && <p className="mt-6 text-gray-500">{t('production.loading')}</p>}
+      {isLoading && (
+        <LoadingPanel label={t('production.loading')} className="mt-6">
+          <SkeletonCardList count={3} />
+        </LoadingPanel>
+      )}
       {isError && (
         <p role="alert" className="mt-6 text-red-700">
           {t('production.loadError')}

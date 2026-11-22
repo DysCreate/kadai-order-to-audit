@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
 import { apiErrorMessage } from '../../lib/apiError'
+import { SkeletonDetailPage } from '../../components/Skeleton'
 import { formatMoney } from '../../lib/money'
 import { useAuth } from '../auth/AuthContext'
 import {
@@ -84,7 +85,7 @@ export default function InvoiceDetailPage() {
     onError: onFailure(t('sales.invoice.creditError'))
   })
 
-  if (invoice.isLoading) return <p className="p-6 text-gray-500">{t('sales.loading')}</p>
+  if (invoice.isLoading) return <SkeletonDetailPage label={t('sales.loading')} />
   if (invoice.isError || !invoice.data)
     return (
       <p role="alert" className="p-6 text-red-700">

@@ -5,9 +5,8 @@ Invariants protected:
   customers, prices or opening ledger rows.
 - Opening stock is posted through ``post_opening_balance`` so every balance is
   a ledger row (OPENING) with a non-null source.
-- ``--reset`` wipes only business data, using TRUNCATE (row triggers do not
-  fire, so the append-only guarantee is replaced by an explicit, auditable
-  reset path).
+- ``--reset`` wipes only business data with DELETE (row triggers are skipped
+  for this explicit, auditable reset path only).
 """
 
 from __future__ import annotations
@@ -16,6 +15,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from django.db import connection, transaction
+from psycopg import sql
 
 from apps.accounts.models import Role, User
 from apps.accounts.services import create_user
@@ -85,12 +85,14 @@ SELLING_PRICE = Decimal("50.00")
 # into 200 packets of 200 g. Roles mark the pouch and carton lines, whose
 # consumption is derived from the packing record at run completion.
 BOM_BATCH_OUTPUT_QTY = Decimal("200")
-BOM_LINES: tuple[tuple[str, Decimal, str], ...] = (
-    ("Flour", Decimal("40"), "material"),
-    ("Cooking oil", Decimal("10"), "material"),
-    ("Salt and spice mix", Decimal("1.2"), "material"),
-    ("200 g pouch", Decimal("200"), "pouch"),
-    ("Carton (holds 20 packets)", Decimal("10"), "carton"),
+# Appendix A BOM rates double as the Leakage Radar standard cost, so they are
+# snapshotted on the BOM version and never rewritten by a later purchase.
+BOM_LINES: tuple[tuple[str, Decimal, str, Decimal], ...] = (
+    ("Flour", Decimal("40"), "material", Decimal("42")),
+    ("Cooking oil", Decimal("10"), "material", Decimal("140")),
+    ("Salt and spice mix", Decimal("1.2"), "material", Decimal("200")),
+    ("200 g pouch", Decimal("200"), "pouch", Decimal("2.50")),
+    ("Carton (holds 20 packets)", Decimal("10"), "carton", Decimal("15")),
 )
 
 SUPPLIER = ("Sri Lakshmi Flour Mills", "33AABCS1234F1Z5")
@@ -157,15 +159,19 @@ class SeedReport:
 def reset_benchmark_data() -> None:
     """Wipe business data so the benchmark can be replayed from scratch.
 
-    TRUNCATE is used because the stock ledger is append-only under UPDATE and
-    DELETE triggers; it restarts identities so invoice/document numbering is
-    deterministic for a benchmark run.
+    DELETE is used rather than TRUNCATE because a benchmark run can happen
+    inside an outer transaction (the console) that already fired deferred
+    triggers, and PostgreSQL refuses to TRUNCATE a table with pending trigger
+    events. ``session_replication_role = replica`` skips the append-only and
+    immutability row triggers for this explicit reset path only; it resets at
+    transaction end. Identity sequences are intentionally left alone, since the
+    benchmark checks never depend on generated ids and invoice numbering comes
+    from the deleted per-financial-year counter row.
     """
-    table_list = ", ".join(BUSINESS_TABLES)
     with connection.cursor() as cursor:
-        cursor.execute(
-            f"TRUNCATE TABLE {table_list} RESTART IDENTITY CASCADE"  # noqa: S608
-        )
+        cursor.execute("SET LOCAL session_replication_role = replica")
+        for table in BUSINESS_TABLES:
+            cursor.execute(sql.SQL("DELETE FROM {}").format(sql.Identifier(table)))
 
 
 def _ensure_user(username: str, role: str) -> User:
@@ -237,8 +243,9 @@ def seed_benchmark(*, reset: bool = False) -> SeedReport:
                     item_id=Item.objects.get(name=item_name).pk,
                     qty_per_batch=qty,
                     role=role,
+                    standard_rate=standard_rate,
                 )
-                for item_name, qty, role in BOM_LINES
+                for item_name, qty, role, standard_rate in BOM_LINES
             ],
         )
         bom_versions = 1
