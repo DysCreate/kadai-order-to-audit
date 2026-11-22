@@ -5,9 +5,8 @@ Invariants protected:
   customers, prices or opening ledger rows.
 - Opening stock is posted through ``post_opening_balance`` so every balance is
   a ledger row (OPENING) with a non-null source.
-- ``--reset`` wipes only business data, using TRUNCATE (row triggers do not
-  fire, so the append-only guarantee is replaced by an explicit, auditable
-  reset path).
+- ``--reset`` wipes only business data with DELETE (row triggers are skipped
+  for this explicit, auditable reset path only).
 """
 
 from __future__ import annotations
@@ -16,6 +15,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from django.db import connection, transaction
+from psycopg import sql
 
 from apps.accounts.models import Role, User
 from apps.accounts.services import create_user
@@ -171,7 +171,7 @@ def reset_benchmark_data() -> None:
     with connection.cursor() as cursor:
         cursor.execute("SET LOCAL session_replication_role = replica")
         for table in BUSINESS_TABLES:
-            cursor.execute(f"DELETE FROM {table}")  # noqa: S608
+            cursor.execute(sql.SQL("DELETE FROM {}").format(sql.Identifier(table)))
 
 
 def _ensure_user(username: str, role: str) -> User:
