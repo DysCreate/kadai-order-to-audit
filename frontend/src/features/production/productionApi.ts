@@ -47,6 +47,26 @@ export interface ProductionRun {
   tolerance: string
 }
 
+export interface BomLine {
+  id: number
+  item_id: number
+  item_name: string
+  uom: string
+  role: RunLineRole
+  qty_per_batch: string
+  standard_rate: string
+}
+
+export interface Bom {
+  id: number
+  product_id: number
+  product_name: string
+  version: number
+  batch_output_qty: string
+  created_at: string
+  lines: BomLine[]
+}
+
 export interface IssueLineInput {
   line: number
   qty: string
@@ -60,6 +80,11 @@ export interface CompleteRunInput {
 
 export async function listRuns(): Promise<ProductionRun[]> {
   const res = await apiClient.get<ProductionRun[]>('/production/runs/')
+  return res.data
+}
+
+export async function listBoms(): Promise<Bom[]> {
+  const res = await apiClient.get<Bom[]>('/production/boms/')
   return res.data
 }
 

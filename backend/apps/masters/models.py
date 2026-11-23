@@ -87,6 +87,17 @@ class Item(models.Model):
         validators=[MinValueValidator(Decimal("0.001"))],
         help_text="Standard batch-hours per batch, used to allocate monthly overheads.",
     )
+    reorder_level = models.DecimalField(
+        max_digits=14,
+        decimal_places=3,
+        default=Decimal("0.000"),
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text=(
+            "Raise a low-stock alert when on-hand stock falls below this level. "
+            "Zero means fall back to one batch's BOM requirement (finished goods:"
+            " only alert at zero)."
+        ),
+    )
 
     class Meta:
         db_table = "masters_item"
@@ -99,6 +110,10 @@ class Item(models.Model):
             models.CheckConstraint(
                 check=models.Q(standard_batch_hours__gt=0),
                 name="chk_item_standard_batch_hours_positive",
+            ),
+            models.CheckConstraint(
+                check=models.Q(reorder_level__gte=0),
+                name="chk_item_reorder_level_non_negative",
             ),
         ]
 

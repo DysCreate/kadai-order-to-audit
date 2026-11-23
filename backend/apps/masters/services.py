@@ -254,11 +254,14 @@ def create_item(
     uom_symbol: str,
     hsn_code: str = "",
     gst_rate: Decimal | str | int = Decimal("0.00"),
+    reorder_level: Decimal | str | int = Decimal("0.000"),
 ) -> Item:
     """Create (or return) an item by unique name.
 
-    Invariants: item type is a valid choice, the base UoM exists, GST rate is
-    a non-negative Decimal.
+    Invariants: item type is a valid choice, the base UoM exists, GST rate and
+    reorder level are non-negative Decimals. Seeding is idempotent and never
+    clobbers a reorder level an operator has already set (a level is only
+    filled in when the item still has its default zero).
     """
     if item_type not in ItemType.values:
         raise DomainError(f"Invalid item type {item_type!r}.")
@@ -266,16 +269,23 @@ def create_item(
     rate = Decimal(gst_rate)
     if rate < 0:
         raise DomainError("GST rate cannot be negative.")
+    level = q3(reorder_level)
+    if level < 0:
+        raise DomainError("A reorder level cannot be negative.")
 
-    item, _created = Item.objects.get_or_create(
+    item, created = Item.objects.get_or_create(
         name=name,
         defaults={
             "item_type": item_type,
             "uom": uom,
             "hsn_code": hsn_code,
             "gst_rate": q2(rate),
+            "reorder_level": level,
         },
     )
+    if not created and item.reorder_level == 0 and level > 0:
+        item.reorder_level = level
+        item.save(update_fields=["reorder_level"])
     return item
 
 

@@ -70,3 +70,34 @@ def test_logout_with_csrf_token_clears_session(role_users: dict[str, User]) -> N
 
     assert response.status_code == 200
     assert client.get("/api/accounts/me/").status_code == 401
+
+
+def test_csrf_accepts_the_loopback_dev_origin(role_users: dict[str, User]) -> None:
+    """PS 12 CSRF: the Vite origin 127.0.0.1:5173 is trusted, not only localhost."""
+    client = Client(enforce_csrf_checks=True)
+    _login(client, role_users[Role.SALESMAN])
+    token = client.cookies["csrftoken"].value
+
+    response = client.post(
+        "/api/accounts/logout/",
+        HTTP_X_CSRFTOKEN=token,
+        HTTP_ORIGIN="http://127.0.0.1:5173",
+    )
+
+    assert response.status_code == 200
+
+
+def test_csrf_rejects_an_untrusted_origin(role_users: dict[str, User]) -> None:
+    """PS 12 CSRF: an origin outside the trusted list is still refused."""
+    client = Client(enforce_csrf_checks=True)
+    _login(client, role_users[Role.SALESMAN])
+    token = client.cookies["csrftoken"].value
+
+    response = client.post(
+        "/api/accounts/logout/",
+        HTTP_X_CSRFTOKEN=token,
+        HTTP_ORIGIN="http://evil.example",
+    )
+
+    assert response.status_code == 403
+    assert client.get("/api/accounts/me/").status_code == 200

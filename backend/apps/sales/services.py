@@ -121,13 +121,21 @@ class _SalesAccumulator:
 
 @dataclass(frozen=True)
 class CoverageLine:
-    """Stock coverage for one order line, net of other commitments."""
+    """Stock coverage for one order line, net of other commitments.
+
+    ``current_price`` is the customer's price today and ``price_changed`` is
+    true when it no longer matches the price snapshotted on the order. The
+    offline outbox makes this visible: an order queued against yesterday's
+    price list is approved knowingly, never silently repriced.
+    """
 
     line: OrderLine
     on_hand_qty: Decimal
     committed_qty: Decimal
     available_qty: Decimal
     shortage_qty: Decimal
+    current_price: Decimal | None = None
+    price_changed: bool = False
 
 
 @dataclass(frozen=True)
@@ -601,6 +609,10 @@ def stock_coverage(order: Order) -> OrderCoverage:
         if shortage < 0:
             shortage = Decimal("0.000")
         total_shortage += shortage
+        try:
+            current_price: Decimal | None = resolve_price(item=line.item, customer=order.customer)
+        except PriceNotFound:
+            current_price = None
         coverage.append(
             CoverageLine(
                 line=line,
@@ -608,6 +620,8 @@ def stock_coverage(order: Order) -> OrderCoverage:
                 committed_qty=committed,
                 available_qty=q3(available),
                 shortage_qty=q3(shortage),
+                current_price=current_price,
+                price_changed=current_price is not None and current_price != line.unit_price,
             )
         )
 

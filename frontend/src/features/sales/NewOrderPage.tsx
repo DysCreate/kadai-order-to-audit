@@ -7,11 +7,15 @@ import { formatMoney } from '../../lib/money'
 import { LoadingPanel, SkeletonCardList } from '../../components/Skeleton'
 import {
   createOrder,
-  listCustomers,
-  listSellableItems,
   type CatalogItem,
+  type CreateOrderInput,
   type Customer
 } from './salesApi'
+import { loadCatalog, loadCustomers } from './offline/catalog'
+import { isNetworkError } from './offline/outbox'
+import { enqueueOrder } from './offline/sync'
+import { useOnline } from './offline/useOutbox'
+import { useAuth } from '../auth/AuthContext'
 
 const RECENTS_KEY = 'kadai.recentCustomers'
 
@@ -83,6 +87,8 @@ export default function NewOrderPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const owner = user?.username ?? ''
 
   const [search, setSearch] = useState('')
   const [customerId, setCustomerId] = useState<number | null>(null)
@@ -91,12 +97,25 @@ export default function NewOrderPage() {
   const [clientUuid, setClientUuid] = useState(() => crypto.randomUUID())
   const [error, setError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState<string | null>(null)
+  const [queued, setQueued] = useState(false)
+  const online = useOnline()
 
-  const customers = useQuery({ queryKey: ['customers'], queryFn: listCustomers })
+  const customers = useQuery({
+    queryKey: ['customers', owner],
+    queryFn: () => loadCustomers(owner),
+    enabled: owner !== '',
+    // Run the offline fallback instead of pausing when the browser is offline.
+    networkMode: 'always'
+  })
+  const selectedCustomer: Customer | undefined = customers.data?.find(
+    (row) => row.id === customerId
+  )
+  const catalogVersion = String(selectedCustomer?.price_list_id ?? 'default')
   const items = useQuery({
-    queryKey: ['catalog', customerId],
-    queryFn: () => listSellableItems(customerId ?? undefined),
-    enabled: customerId !== null
+    queryKey: ['catalog', owner, customerId, catalogVersion],
+    queryFn: () => loadCatalog(owner, customerId as number, catalogVersion),
+    enabled: customerId !== null && owner !== '',
+    networkMode: 'always'
   })
 
   const recents = readRecents()
@@ -114,12 +133,14 @@ export default function NewOrderPage() {
     })
   }, [customers.data, search, recents])
 
-  const selectedCustomer: Customer | undefined = customers.data?.find((row) => row.id === customerId)
   const selectedLines = (items.data ?? []).filter((item) => Number(quantities[item.id] ?? '0') > 0)
 
   const mutation = useMutation({
-    mutationFn: () =>
-      createOrder({
+    // Without this React Query pauses the mutation while offline, so the
+    // outbox would never be written and the order would wait for reconnect.
+    networkMode: 'always',
+    mutationFn: async (): Promise<{ queued: boolean; number?: string }> => {
+      const payload: CreateOrderInput = {
         client_uuid: clientUuid,
         customer: customerId as number,
         notes,
@@ -127,10 +148,24 @@ export default function NewOrderPage() {
           item: item.id,
           qty: quantities[item.id] ?? '0'
         }))
-      }),
-    onSuccess: (order) => {
+      }
+      if (navigator.onLine) {
+        try {
+          const order = await createOrder(payload)
+          return { queued: false, number: order.number }
+        } catch (failure) {
+          // A dropped connection is not a rejected order: keep it on the
+          // device under the same client UUID and let the outbox retry.
+          if (!isNetworkError(failure)) throw failure
+        }
+      }
+      await enqueueOrder(payload, selectedCustomer?.name ?? '', owner)
+      return { queued: true }
+    },
+    onSuccess: (outcome) => {
       setError(null)
-      setSubmitted(order.number)
+      setQueued(outcome.queued)
+      setSubmitted(outcome.queued ? null : (outcome.number ?? null))
       setQuantities({})
       setNotes('')
       setClientUuid(crypto.randomUUID())
@@ -144,6 +179,7 @@ export default function NewOrderPage() {
     event.preventDefault()
     setError(null)
     setSubmitted(null)
+    setQueued(false)
     if (customerId === null || selectedLines.length === 0) {
       setError(t('sales.order.needCustomerAndItem'))
       return
@@ -156,9 +192,26 @@ export default function NewOrderPage() {
       <h2 className="text-2xl font-semibold text-gray-800">{t('sales.order.title')}</h2>
       <p className="mt-1 text-sm text-gray-500">{t('sales.order.subtitle')}</p>
 
+      {!online && (
+        <p className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+          {t('sales.order.offlineHint')}
+        </p>
+      )}
       {submitted && (
         <div role="status" className="mt-4 rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-800">
           {t('sales.order.submitted', { number: submitted })}{' '}
+          <button
+            type="button"
+            onClick={() => navigate('/orders')}
+            className="font-semibold underline"
+          >
+            {t('sales.order.viewOrders')}
+          </button>
+        </div>
+      )}
+      {queued && (
+        <div role="status" className="mt-4 rounded-md border border-blue-300 bg-blue-50 p-3 text-sm text-blue-900">
+          {t('sales.order.queued')}{' '}
           <button
             type="button"
             onClick={() => navigate('/orders')}
