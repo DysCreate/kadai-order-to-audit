@@ -65,7 +65,9 @@ Then open http://localhost:3000
 | Leakage Radar (report card, bridge, drift, leakage tile) | ✅ Phase 6 |
 | Loop Closer (shortage → batches → purchase) | ✅ Phase 6 |
 | Benchmark Console (UI, CLI and CI) | ✅ Phase 6 |
-| Offline PWA | 🚧 Phase 7 |
+| Offline ordering (IndexedDB cache, outbox, pending badge, sync) | ✅ Phase 7 |
+| Low-stock alerts (per-item reorder level) | ✅ Phase 7 |
+| Tamil UI (language switcher, all screens) | ✅ Phase 7 |
 
 ## Phase 1 Inventory API
 
@@ -155,7 +157,9 @@ and owner can add labour, gas/power or other overheads from the same screen.
 | GET | `/api/reports/reconciliation/?date_from=&date_to=` | admin, production, accountant, owner |
 | GET | `/api/reports/dashboard/` | admin, accountant, owner |
 
-The report console lives at `/reports` and the owner dashboard at `/`. The ten
+The report console lives at `/reports`; `/` shows the owner dashboard for
+admin, accountant and owner, and sends the production role to `/production`
+(the dashboard endpoint is staff-only). The ten
 reports are the sales register, sales by customer, sales by product, GST summary
 (GSTR-1 shaped, with a GSTR-3B outward-supply figure), purchase register, stock
 summary, stock ledger, production report, collections and outstanding/ageing.
@@ -182,6 +186,42 @@ at `/production/runs/<id>` shows the Leakage Radar report card and its
 cost-per-packet bridge, the ingredient trends and drift alerts. The admin order
 inbox shows the Loop Closer panel on a shortage, including the limiting input
 and a one-click planned production run.
+
+## Phase 7 Offline PWA and small wins
+
+The salesman app is installable and keeps working without a connection:
+
+- **Cached catalog.** Customer and priced-catalog responses are written through
+  to IndexedDB (`kadai` database, Dexie). The catalog row carries the price-list
+  version it belongs to and the fetch time, so the order screen opens with the
+  last data the server sent.
+- **Outbox.** A submit while offline (or a request that fails before it reaches
+  the server) is queued locally under the order's own `client_uuid`. The queue
+  survives a reload; retries reuse the same UUID, so the existing idempotent
+  `POST /api/sales/orders/` can never create a duplicate.
+- **Sync.** The outbox flushes on mount, on the browser `online` event, when the
+  service-worker Background Sync tag wakes the page, and from the **Sync now**
+  button. Network failures keep the queue; a refused order stays queued with the
+  server's message.
+- **Visibility.** The sidebar shows an offline banner, a `Pending (n)` badge and
+  sync failures for every role.
+- **Price-list drift.** `GET /api/sales/orders/<id>/coverage/` now returns each
+  line's `current_price` and `price_changed`. The admin inbox shows
+  "Price list changed: now ₹…" beside the snapshotted price, so an order taken
+  against yesterday's list is approved knowingly (the order itself is never
+  repriced).
+- **Low-stock alerts.** `Item.reorder_level` is a NUMERIC(14,3) master field.
+  The dashboard flags a raw or packaging item below its own level; when the
+  level is zero it falls back to one batch's BOM requirement, and finished goods
+  fall back to zero stock. The benchmark seed sets one batch as each input's
+  level, so the Appendix A closings still show no alerts.
+- **Tamil UI.** The language switcher in the sidebar toggles English/தமிழ் and
+  remembers the choice in `localStorage`; every screen already routes its copy
+  through react-i18next, including the production run screen.
+
+The worker (`frontend/src/sw.js`) only precaches the app shell and relays the
+Background Sync wake-up; API responses are never cached by the service worker
+and all order data offline comes from IndexedDB.
 
 ## Sales loop
 
@@ -211,7 +251,9 @@ average. A run moves `DRAFT → ISSUED → COMPLETED`: issuing posts one `ISSUE`
 row per raw material, completing records the packing result, posts the derived
 pouch and carton issues plus the finished-goods `RECEIPT`, and stores a
 variance snapshot (one row per input plus the yield). Every transition writes
-an `audit_log` row in the same transaction.
+an `audit_log` row in the same transaction. The Production screen at
+`/production` plans a draft run from the current BOM, then issues materials
+and records the packing result on the run screen.
 
 ## Assumptions
 
@@ -334,6 +376,22 @@ Phase 6 adds these USP readings:
     positive price and usage impacts plus the standard cost of missing packets;
     favourable lines do not net it down, and the top three culprits are shown.
     In the benchmark that is 115 adverse material + 238.20 yield = 353.20.
+
+Phase 7 adds these offline and alerting readings:
+
+28. **Offline prices are the last fetched prices.** The catalog cache stores the
+    price-list version and fetch time; nothing is repriced on the device. If the
+    list moved while an order sat in the outbox, the server's `price_changed`
+    flag surfaces it to the admin rather than rewriting the order.
+29. **The outbox is a retry queue, not a second order store.** Rows are keyed by
+    the order's `client_uuid` and removed only after a successful (or
+    idempotent replay) response. A 4xx answer keeps the row with its error for
+    review; a network failure ends the flush and leaves the rest queued.
+30. **Reorder levels are seeded at one batch.** Appendix A does not specify
+    reorder levels; the seed sets each input's level to its one-batch BOM
+    requirement (flour 40 kg, oil 10 L, spice mix 1.2 kg, pouches 200, cartons
+    10) and leaves finished goods at zero. An operator-set non-zero level always
+    wins over the BOM fallback.
 
 ## Benchmark Results
 

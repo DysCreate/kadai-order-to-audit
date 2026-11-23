@@ -294,6 +294,13 @@ export default function AdminOrderInboxPage() {
                             }
                             className="h-11 w-24 rounded-md border-gray-300 text-right tabular-nums shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:bg-gray-100"
                           />
+                          {cover?.price_changed && (
+                            <span className="mt-1 block text-xs font-medium text-amber-700">
+                              {t('sales.inbox.priceChanged', {
+                                price: formatMoney(cover.current_price)
+                              })}
+                            </span>
+                          )}
                           {canApprove(selected.state) && (
                             <button
                               type="button"

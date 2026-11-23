@@ -3,9 +3,9 @@
 Invariants protected:
 - "Today" is the Asia/Kolkata business day, even though timestamps are stored
   in UTC.
-- Reorder flags are derived from the active BOM: a raw or packaging item is
-  flagged when on-hand stock is below one batch's requirement. Finished goods
-  are flagged only when they are out of stock. No new master field is invented.
+- Reorder flags use the item's own ``reorder_level`` when one is set. When it
+  is zero, a raw or packaging item falls back to one batch's BOM requirement
+  and finished goods are flagged only when they are out of stock.
 - Cost per packet comes from the latest completed run's stored cost sheet and
   outstanding dues from the payments service, so the dashboard never keeps a
   second set of books.
@@ -67,13 +67,16 @@ def dashboard() -> dict[str, Any]:
     for summary in stock_summary():
         item: Item = summary.item
         requirement = requirements.get(item.pk)
+        # An explicit master level wins; otherwise fall back to one BOM batch
+        # (raw/packaging) or zero stock (finished goods).
+        threshold = item.reorder_level if item.reorder_level > 0 else requirement
         reorder = False
         reorder_qty = Decimal("0.000")
-        if item.item_type == ItemType.FG:
-            reorder = summary.qty == 0
-        elif requirement is not None and summary.qty < requirement:
+        if threshold is not None and summary.qty < threshold:
             reorder = True
-            reorder_qty = q3(requirement - summary.qty)
+            reorder_qty = q3(threshold - summary.qty)
+        elif item.item_type == ItemType.FG and item.reorder_level == 0:
+            reorder = summary.qty == 0
         if reorder:
             reorder_count += 1
         stock_rows.append(
@@ -86,6 +89,7 @@ def dashboard() -> dict[str, Any]:
                 "value": summary.value,
                 "reorder": reorder,
                 "reorder_qty": reorder_qty,
+                "reorder_level": item.reorder_level,
                 "batch_requirement": requirement,
             }
         )

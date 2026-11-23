@@ -160,6 +160,23 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 # ---------------------------------------------------------------------------
+# CSRF
+# ---------------------------------------------------------------------------
+# The SPA is served from the Vite dev server (5173) or the built web image
+# (3000) while the API listens on 8000, so the browser's Origin header never
+# matches the API host. Trust the dev origins explicitly (both spellings of
+# loopback). A production deployment behind nginx is one origin, so it can set
+# the env var to an empty string.
+CSRF_TRUSTED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        "CSRF_TRUSTED_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",")
+    if o.strip()
+]
+
+# ---------------------------------------------------------------------------
 # Session
 # ---------------------------------------------------------------------------
 SESSION_COOKIE_HTTPONLY = True

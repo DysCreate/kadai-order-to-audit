@@ -143,6 +143,21 @@ def test_price_must_be_non_negative(units: None) -> None:
         set_price(price_list=price_list, item=item, price="-1")
 
 
+def test_reorder_level_is_validated_and_filled_once(units: None) -> None:
+    """PS 9 low stock: the reorder level is a non-negative Decimal and seed-safe."""
+    item = create_item(name="Flour", item_type="RAW", uom_symbol="kg", reorder_level=Decimal("40"))
+    assert item.reorder_level == Decimal("40.000")
+
+    # Re-running the seed through the service does not duplicate the item and
+    # fills the level only while it is still the default zero.
+    again = create_item(name="Flour", item_type="RAW", uom_symbol="kg", reorder_level="50")
+    assert again.pk == item.pk
+    assert again.reorder_level == Decimal("40.000")
+
+    with pytest.raises(DomainError):
+        create_item(name="Oil", item_type="RAW", uom_symbol="kg", reorder_level="-1")
+
+
 def test_only_one_default_price_list(units: None) -> None:
     """PS 1 price list: promoting a list to default clears the previous one."""
     first = create_price_list(name="First", is_default=True)

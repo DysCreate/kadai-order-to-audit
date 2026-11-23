@@ -79,6 +79,8 @@ export interface CoverageLine {
   committed_qty: string
   available_qty: string
   shortage_qty: string
+  current_price: string | null
+  price_changed: boolean
 }
 
 export interface CapacityRow {

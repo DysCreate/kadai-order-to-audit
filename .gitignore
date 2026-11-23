@@ -36,6 +36,9 @@ postgres_data/
 *.swo
 *~
 
+# Playwright CLI session artifacts
+.playwright-cli/
+
 # Misc
 *.log
 *.pot

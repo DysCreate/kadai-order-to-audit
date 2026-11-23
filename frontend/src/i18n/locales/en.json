@@ -2,6 +2,16 @@
   "common": {
     "loading": "Loading…"
   },
+  "offline": {
+    "banner": "Offline — showing saved data.",
+    "pending": "Pending ({{count}})",
+    "syncing": "Syncing…",
+    "syncNow": "Sync now",
+    "syncFailed": "Some orders could not be synced. Open the order inbox to review them."
+  },
+  "language": {
+    "label": "Language"
+  },
   "notFound": {
     "title": "Page not found",
     "subtitle": "The page you were looking for does not exist or has moved.",
@@ -49,6 +59,8 @@
       "products": "Products",
       "noProducts": "No priced products available.",
       "priceEach": "{{price}} per packet",
+      "offlineHint": "You are offline. The order is saved on this device and sent automatically when the connection returns.",
+      "queued": "Offline — the order is saved on this device and will sync when you reconnect.",
       "gst": "GST {{rate}}%",
       "quantityFor": "{{item}} quantity",
       "decrease": "Decrease {{item}}",
@@ -82,6 +94,7 @@
       "available": "Available",
       "qty": "Qty",
       "price": "Price",
+      "priceChanged": "Price list changed: now {{price}}",
       "plan": "Ordered {{qty}} {{uom}}",
       "shortage": "Short by {{qty}}",
       "covered": "{{qty}} free",
@@ -201,6 +214,17 @@
     "empty": "No production runs yet.",
     "runLabel": "Run #{{id}}",
     "batches": "{{batches}} batch(es)",
+    "newRun": {
+      "title": "Plan a production run",
+      "hint": "Creates a draft run from the current BOM. Materials are issued on the next step.",
+      "product": "Product",
+      "productOption": "{{product}} · BOM v{{version}} · {{output}} packets per batch",
+      "batches": "Batches",
+      "submit": "Create draft run",
+      "error": "Could not plan the production run.",
+      "bomError": "Could not load the bill of materials.",
+      "noBoms": "No BOM exists yet, so a run cannot be planned. Add a BOM for a finished-goods item first."
+    },
     "plannedOutput": "planned {{qty}} packets",
     "plan": "Plan: {{qty}} {{uom}}",
     "bomVersion": "BOM v{{version}}",
@@ -320,7 +344,7 @@
     "outstanding": "Outstanding dues",
     "customersDue": "{{count}} customer(s) owe money",
     "reorderLines": "Reorder lines",
-    "reorderHint": "Below one batch of stock",
+    "reorderHint": "Below the reorder level",
     "costPerPacket": "Cost per packet",
     "margin": "Margin {{margin}} per packet ({{pct}}%)",
     "noCost": "No completed run yet.",

@@ -346,6 +346,41 @@ Run on a live database and nothing changes. `make benchmark` runs the same
 scenario from the command line and exits non-zero on any mismatch; the admin
 page at `/benchmark` shows the same PASS/FAIL table.
 
+## Offline ordering (PWA)
+
+The salesman screen is a Progressive Web App. The API stays the only source of
+truth; the browser holds two things:
+
+| Store | Contents | Key |
+|-------|----------|-----|
+| `customers` | Last successful customer list | `customers` |
+| `catalog` | Priced items per customer, with price-list version and fetch time | `customer:<id>` |
+| `outbox` | Orders that have not reached the server | `client_uuid` |
+
+A submit while `navigator.onLine` is false, or one whose request fails before a
+response arrives, is written to the outbox. Storage and submission share the
+same `client_uuid`, so the existing idempotent order endpoint makes a replay
+safe. The flush is oldest-first; a network failure stops it and keeps the rows,
+while a server refusal keeps the row with its error rather than losing the sale.
+
+The service worker precaches the app shell and handles the Background Sync tag
+by messaging open pages, which then flush with their session cookie and CSRF
+token (the worker never writes orders itself). API responses are not cached by
+the worker.
+
+Order coverage compares each line's snapshotted price with the customer's
+current price and returns `price_changed` and `current_price`, so the admin sees
+price-list drift on an offline order instead of approving it blindly.
+
+## Low-stock alerts
+
+`Item.reorder_level` (NUMERIC(14,3), non-negative) is the master low-stock
+threshold. The dashboard flags an item when on-hand stock is below its level
+and reports the shortfall. A level of zero keeps the older fallback: one batch's
+BOM requirement for raw and packaging items, and zero stock for finished goods.
+The seed sets one batch for the Appendix A inputs; an operator-set level always
+wins.
+
 ## Assumptions (from Appendix A)
 
 | # | Assumption |
@@ -381,6 +416,10 @@ page at `/benchmark` shows the same PASS/FAIL table.
 | A29 | Drift = adverse beyond half the tolerance on three consecutive completed runs; it is a warning alongside, not instead of, the hard variance flag. |
 | A30 | Loop Closer uses the trailing yield over the last five completed runs (1.0 when none exist), the minimum whole batches across BOM inputs, and a ceiling-rounded purchase list only when the need exceeds stock. |
 | A31 | The Benchmark Console runs in a rolled-back transaction; it never leaves benchmark data in live books. |
+| A32 | Offline catalog data is the last successful server response; the device never reprices. The cache stores the price-list version and fetch time. |
+| A33 | The outbox is keyed by `client_uuid` and is removed only after a successful or idempotent replay. A 4xx keeps the order with its error; a network failure keeps the remaining queue. |
+| A34 | The service worker precaches only the app shell. It relays Background Sync to open pages and never posts orders itself. |
+| A35 | `Item.reorder_level` wins over the BOM fallback when non-zero. The seed sets one batch per input because Appendix A does not fix reorder levels; finished goods keep zero. |
 
 ---
 
@@ -414,8 +453,9 @@ Three audit checks back `make reconcile`:
 The owner dashboard reads the same sources, never a second set of books:
 today's orders (Asia/Kolkata day bounds), open orders, stock with reorder
 flags, the last 30 days' flagged variance, the latest completed run's cost per
-packet and total outstanding dues. A reorder flag means raw or packaging stock
-is below one batch's BOM requirement; finished goods flag only at zero.
+packet and total outstanding dues. A reorder flag means stock is below the
+item's `reorder_level`; with no level set it falls back to one batch's BOM
+requirement for raw and packaging items, and finished goods flag only at zero.
 
 ---
 

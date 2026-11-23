@@ -129,6 +129,8 @@ class CoverageLineSerializer(serializers.Serializer[Any]):
     committed_qty = serializers.DecimalField(max_digits=14, decimal_places=3)
     available_qty = serializers.DecimalField(max_digits=14, decimal_places=3)
     shortage_qty = serializers.DecimalField(max_digits=14, decimal_places=3)
+    current_price = serializers.DecimalField(max_digits=14, decimal_places=2, allow_null=True)
+    price_changed = serializers.BooleanField()
 
 
 class TaxSummarySerializer(serializers.Serializer[Any]):

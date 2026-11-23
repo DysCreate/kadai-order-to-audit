@@ -60,13 +60,16 @@ USERS: tuple[tuple[str, str], ...] = (
     ("owner", Role.OWNER),
 )
 
-ITEMS: tuple[tuple[str, str, str, str, str], ...] = (
-    ("Flour", ItemType.RAW, "kg", "1101", "5.00"),
-    ("Cooking oil", ItemType.RAW, "L", "1507", "5.00"),
-    ("Salt and spice mix", ItemType.RAW, "kg", "0910", "5.00"),
-    ("200 g pouch", ItemType.PACKAGING, "pc", "3923", "18.00"),
-    ("Carton (holds 20 packets)", ItemType.PACKAGING, "pc", "4819", "18.00"),
-    ("Murukku 200 g", ItemType.FG, "pkt", "2106", "5.00"),
+# (name, type, uom, HSN, GST rate, reorder level). Reorder levels are one
+# batch's BOM requirement, a Phase 7 low-stock alert; Appendix A does not fix
+# them, so they are seeded to mirror the previous BOM-derived behaviour.
+ITEMS: tuple[tuple[str, str, str, str, str, str], ...] = (
+    ("Flour", ItemType.RAW, "kg", "1101", "5.00", "40"),
+    ("Cooking oil", ItemType.RAW, "L", "1507", "5.00", "10"),
+    ("Salt and spice mix", ItemType.RAW, "kg", "0910", "5.00", "1.2"),
+    ("200 g pouch", ItemType.PACKAGING, "pc", "3923", "18.00", "200"),
+    ("Carton (holds 20 packets)", ItemType.PACKAGING, "pc", "4819", "18.00", "10"),
+    ("Murukku 200 g", ItemType.FG, "pkt", "2106", "5.00", "0"),
 )
 
 OPENING_STOCK: tuple[tuple[str, Decimal, Decimal], ...] = (
@@ -220,13 +223,14 @@ def seed_benchmark(*, reset: bool = False) -> SeedReport:
 
     price_list = create_price_list(name=CUSTOMER_PRICE_LIST_NAME, is_default=True)
 
-    for name, item_type, uom_symbol, hsn_code, gst_rate in ITEMS:
+    for name, item_type, uom_symbol, hsn_code, gst_rate, reorder_level in ITEMS:
         create_item(
             name=name,
             item_type=item_type,
             uom_symbol=uom_symbol,
             hsn_code=hsn_code,
             gst_rate=Decimal(gst_rate),
+            reorder_level=Decimal(reorder_level),
         )
 
     finished_goods = Item.objects.get(name=FINISHED_GOODS_NAME)
