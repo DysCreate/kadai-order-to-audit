@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from django.conf import settings
+from django.http import Http404
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -25,4 +27,6 @@ class BenchmarkRunView(APIView):
     allowed_roles: ClassVar[tuple[str, ...]] = (Role.ADMIN, Role.OWNER)
 
     def post(self, request: Request) -> Response:
+        if not settings.ENABLE_BENCHMARK_TOOLS:
+            raise Http404("Not found.")
         return Response(serialize_result(run_benchmark_scenario()))

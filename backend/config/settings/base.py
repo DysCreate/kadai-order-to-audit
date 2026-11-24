@@ -46,6 +46,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -124,6 +125,11 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+
 # ---------------------------------------------------------------------------
 # Default primary key
 # ---------------------------------------------------------------------------
@@ -181,3 +187,25 @@ CSRF_TRUSTED_ORIGINS = [
 # ---------------------------------------------------------------------------
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+
+# ---------------------------------------------------------------------------
+# Login throttle
+# ---------------------------------------------------------------------------
+# Failed logins are counted per (client address, username) in the local cache.
+# Production can raise or lower this without a code change.
+LOGIN_MAX_FAILED_ATTEMPTS = int(os.environ.get("LOGIN_MAX_FAILED_ATTEMPTS", "5"))
+LOGIN_MAX_FAILED_ATTEMPTS_PER_IP = int(os.environ.get("LOGIN_MAX_FAILED_ATTEMPTS_PER_IP", "20"))
+LOGIN_LOCKOUT_SECONDS = int(os.environ.get("LOGIN_LOCKOUT_SECONDS", "300"))
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "kadai",
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Test-only tools
+# ---------------------------------------------------------------------------
+# The Benchmark Console, its API and the seed/run commands are development and
+# CI tools. Production settings turn this off so they are not shipped features.
+ENABLE_BENCHMARK_TOOLS = True

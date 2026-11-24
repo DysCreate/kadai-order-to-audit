@@ -53,6 +53,7 @@ class ItemCatalogView(MastersAPIView):
     allowed_roles = tuple(Role.values)
 
     def get(self, request: Request) -> Response:
+        user = _user(request)
         items = Item.objects.select_related("uom").order_by("name")
 
         item_type = request.query_params.get("type")
@@ -69,6 +70,13 @@ class ItemCatalogView(MastersAPIView):
             except (TypeError, ValueError) as exc:
                 raise Http404("customer must be a customer id.") from exc
             customer = get_object_or_404(Customer, pk=customer_id)
+            # A salesman may only resolve prices for their own customers; the
+            # customer id is user input and must not widen the RBAC scope.
+            if (
+                user.role == Role.SALESMAN
+                and not customer.assigned_salesmen.filter(pk=user.pk).exists()
+            ):
+                raise Http404("Customer not found.")
 
         serializer = ItemCatalogSerializer(items, many=True, context={"customer": customer})
         return Response(serializer.data)

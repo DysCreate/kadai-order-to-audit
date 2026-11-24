@@ -8,6 +8,7 @@ database.
 
 from typing import Any
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.benchmark.scenario import run_benchmark_scenario
@@ -17,6 +18,8 @@ class Command(BaseCommand):
     help = "Run the Appendix A benchmark console and print every check."
 
     def handle(self, *args: Any, **options: Any) -> str | None:
+        if not settings.ENABLE_BENCHMARK_TOOLS:
+            raise CommandError("The benchmark harness is disabled in this environment.")
         result = run_benchmark_scenario()
         self.stdout.write(f"Benchmark: {result.passed}/{len(result.checks)} checks passed")
         self.stdout.write(f"{'Check':<44} {'Expected':>14} {'Actual':>14}  Result")

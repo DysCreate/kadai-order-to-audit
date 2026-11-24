@@ -133,6 +133,25 @@ def test_salesman_cannot_order_for_an_unassigned_customer(client: object, seeded
     assert Order.objects.count() == 0
 
 
+def test_salesman_cannot_price_an_unassigned_customers_catalog(
+    client: object, seeded: None
+) -> None:
+    """PS 4.12: the item catalog must not expose another customer's price list."""
+    retailer_a = _customer("Retailer A")
+
+    _login(client, "salesman_b")
+    denied = client.get(  # type: ignore[attr-defined]
+        reverse("masters-item-list"), {"type": "FG", "customer": retailer_a.pk}
+    )
+    assert denied.status_code == 404
+
+    _login(client, "salesman_a")
+    allowed = client.get(  # type: ignore[attr-defined]
+        reverse("masters-item-list"), {"type": "FG", "customer": retailer_a.pk}
+    )
+    assert allowed.status_code == 200
+
+
 def test_salesman_sees_only_their_own_orders(client: object, seeded: None) -> None:
     """PS 4.12: order lists are scoped per salesman."""
     _submit_order(client, salesman="salesman_a")

@@ -12,8 +12,8 @@ import InvoiceListPage from '../features/sales/InvoiceListPage'
 import InvoiceDetailPage from '../features/sales/InvoiceDetailPage'
 import PaymentsPage from '../features/payments/PaymentsPage'
 import DashboardPage from '../features/dashboard/DashboardPage'
+import SalesmanDashboardPage from '../features/dashboard/SalesmanDashboardPage'
 import ReportsPage from '../features/reports/ReportsPage'
-import BenchmarkPage from '../features/benchmark/BenchmarkPage'
 import NotFoundPage from './NotFoundPage'
 
 const NAV_ITEMS: { to: string; labelKey: string; roles: string[] }[] = [
@@ -26,30 +26,22 @@ const NAV_ITEMS: { to: string; labelKey: string; roles: string[] }[] = [
   { to: '/invoices', labelKey: 'nav.invoices', roles: ['salesman', 'admin', 'accountant', 'owner'] },
   { to: '/payments', labelKey: 'nav.payments', roles: ['admin', 'accountant', 'owner'] },
   { to: '/production', labelKey: 'nav.production', roles: ['production', 'admin', 'owner'] },
-  { to: '/reports', labelKey: 'nav.reports', roles: ['admin', 'production', 'accountant', 'owner'] },
-  { to: '/benchmark', labelKey: 'nav.benchmark', roles: ['admin', 'owner'] }
+  { to: '/reports', labelKey: 'nav.reports', roles: ['admin', 'production', 'accountant', 'owner'] }
 ]
 
-export type Landing = 'welcome' | 'production' | 'dashboard'
+export type Landing = 'salesman' | 'production' | 'dashboard'
 
 /**
- * Which screen a role sees at `/`. Production has no dashboard access on the
- * server (PS 12), so it lands on the run list instead of an error page.
+ * Which screen a role sees at `/`.
+ *
+ * A salesman gets a dashboard scoped to their own orders (the server denies
+ * them the all-salesman report dashboard), and production has no dashboard
+ * access on the server (PS 12), so it lands on the run list instead.
  */
 export function landingForRole(role: string): Landing {
-  if (role === 'salesman') return 'welcome'
+  if (role === 'salesman') return 'salesman'
   if (role === 'production') return 'production'
   return 'dashboard'
-}
-
-function Welcome() {
-  const { t } = useTranslation()
-  return (
-    <div className="p-6">
-      <h2 className="text-2xl font-semibold text-gray-800">{t('nav.dashboard')}</h2>
-      <p className="mt-2 text-gray-500">{t('nav.welcome')}</p>
-    </div>
-  )
 }
 
 export default function Layout() {
@@ -163,8 +155,8 @@ export default function Layout() {
           <Route
             path="/"
             element={
-              landing === 'welcome' ? (
-                <Welcome />
+              landing === 'salesman' ? (
+                <SalesmanDashboardPage />
               ) : landing === 'production' ? (
                 <Navigate to="/production" replace />
               ) : (
@@ -181,7 +173,6 @@ export default function Layout() {
           <Route path="/production" element={<RunListPage />} />
           <Route path="/production/runs/:id" element={<RunDetailPage />} />
           <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/benchmark" element={<BenchmarkPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>

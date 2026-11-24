@@ -34,9 +34,9 @@ describe('Layout', () => {
     auth.role = 'production'
   })
 
-  it('lands production on the run list and everyone else on their home', () => {
+  it('lands each role on its own home screen', () => {
     expect(landingForRole('production')).toBe('production')
-    expect(landingForRole('salesman')).toBe('welcome')
+    expect(landingForRole('salesman')).toBe('salesman')
     expect(landingForRole('admin')).toBe('dashboard')
     expect(landingForRole('accountant')).toBe('dashboard')
     expect(landingForRole('owner')).toBe('dashboard')
