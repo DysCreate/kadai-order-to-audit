@@ -48,6 +48,18 @@ _EXCEL_FORMATS = {
     KIND_VARIANCE: "0.000000",
 }
 
+# Spreadsheet programs execute a text cell that starts with one of these as a
+# formula. Customer and item names are user-supplied master data, so exports
+# neutralise them instead of trusting the file viewer.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _neutralize_formula(value: str) -> str:
+    """Prefix a text cell that a spreadsheet would treat as a formula."""
+    if value.startswith(_FORMULA_PREFIXES):
+        return f"'{value}"
+    return value
+
 
 @dataclass(frozen=True)
 class Column:
@@ -116,9 +128,13 @@ def render_csv(result: ReportResult) -> bytes:
     writer = csv.writer(buffer, lineterminator="\r\n")
     writer.writerow([column.label for column in result.columns])
     for row in result.rows:
-        writer.writerow(
-            [display_value(row.get(column.key), column.kind) for column in result.columns]
-        )
+        values: list[str] = []
+        for column in result.columns:
+            text = display_value(row.get(column.key), column.kind)
+            if column.kind == KIND_TEXT:
+                text = _neutralize_formula(text)
+            values.append(text)
+        writer.writerow(values)
     if result.totals:
         writer.writerow(_totals_row(result))
     return buffer.getvalue().encode("utf-8")
@@ -148,8 +164,18 @@ def render_excel(result: ReportResult) -> bytes:
     for cell in sheet[1]:
         cell.font = Font(bold=True)
 
-    for row in result.rows:
-        sheet.append([row.get(column.key) for column in result.columns])
+    for row_number, row in enumerate(result.rows, start=2):
+        for index, column in enumerate(result.columns, start=1):
+            value = row.get(column.key)
+            cell = sheet.cell(row=row_number, column=index, value=value)
+            # openpyxl turns a leading '=' into a formula; force the cell back
+            # to text for user-supplied string columns.
+            if (
+                column.kind == KIND_TEXT
+                and isinstance(value, str)
+                and value.startswith(_FORMULA_PREFIXES)
+            ):
+                cell.data_type = "s"
 
     if result.totals:
         sheet.append(["Total"] + [result.totals.get(column.key) for column in result.columns[1:]])

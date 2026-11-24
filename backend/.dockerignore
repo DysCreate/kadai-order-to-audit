@@ -1,0 +1,19 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+*.log
+
+# Never bake local environment files into an image.
+.env
+.env.*
+
+# Tests and local tooling are not needed at runtime.
+tests/

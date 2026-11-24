@@ -13,7 +13,10 @@ make seed    # load benchmark data
 
 Then open http://localhost:3000
 
-## Test Logins
+## Development Logins
+
+These users come from `make seed` and exist **only in the development/CI
+database**. Never run the seed command against production.
 
 | Role | Username | Password |
 |------|----------|----------|
@@ -23,6 +26,50 @@ Then open http://localhost:3000
 | Production | production | production |
 | Accountant | accountant | accountant |
 | Owner | owner | owner |
+
+## Production deployment
+
+Two deployment paths are supported.
+
+### Managed free tier (Cloudflare + Render + Neon)
+
+The React app and a `/api` forwarder run on Cloudflare Workers, the Django API
+runs on Render's free Docker plan, and PostgreSQL runs on Neon. See
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the step-by-step guide,
+environment variables, owner bootstrap and smoke tests. `render.yaml` describes
+the Render service; `frontend/wrangler.jsonc` and `frontend/worker/index.ts`
+describe the Worker.
+
+A fresh production database has no users. Create the first owner once:
+
+```bash
+ADMIN_USERNAME=owner ADMIN_PASSWORD='a-long-unique-password' \
+  python manage.py bootstrap_admin
+```
+
+### Self-hosted Docker Compose
+
+```bash
+cp .env.example .env      # fill in the production values
+make up-prod               # docker compose -f docker-compose.prod.yml up --build -d
+```
+
+The production stack differs from development:
+
+- API runs under **gunicorn** with `config.settings.production`, not `runserver`.
+- `SECRET_KEY`, `ALLOWED_HOSTS` and `DATABASE_URL` are mandatory; the container
+  refuses to start without them and rejects `ALLOWED_HOSTS=*`.
+- Secure cookies are always on. Set `SECURE_SSL_REDIRECT=true` and
+  `SECURE_HSTS_SECONDS=31536000` once TLS terminates in front of `web`.
+- The **Benchmark Console, its API and the seed/run commands are disabled**.
+- Static admin assets are served by WhiteNoise; nginx adds CSP and security
+  headers, gzip, immutable asset caching and the `/api/` proxy.
+- `make check-deploy` runs Django's production checks.
+
+Django's admin site is intentionally not routed through the public nginx
+config in the self-hosted stack; reach it from inside the network if you need
+it. In the managed deployment it is available on the Render hostname at
+`/admin/`.
 
 ## Stack
 
@@ -64,7 +111,7 @@ Then open http://localhost:3000
 | Reports, exports, reconciliation and owner dashboard | ✅ Phase 5 |
 | Leakage Radar (report card, bridge, drift, leakage tile) | ✅ Phase 6 |
 | Loop Closer (shortage → batches → purchase) | ✅ Phase 6 |
-| Benchmark Console (UI, CLI and CI) | ✅ Phase 6 |
+| Benchmark harness (CLI and CI only; disabled in production) | ✅ Phase 6 |
 | Offline ordering (IndexedDB cache, outbox, pending badge, sync) | ✅ Phase 7 |
 | Low-stock alerts (per-item reorder level) | ✅ Phase 7 |
 | Tamil UI (language switcher, all screens) | ✅ Phase 7 |
@@ -175,13 +222,14 @@ and the sales register's taxable total equals the GST summary's taxable total.
 | GET | `/api/production/runs/<id>/report-card/` | production, admin, accountant, owner |
 | GET | `/api/production/products/<id>/leakage/` | production, admin, accountant, owner |
 | GET | `/api/sales/orders/<id>/coverage/` | admin, accountant, owner (now carries `loop_closers`) |
-| POST | `/api/benchmark/run/` | admin, owner |
+| POST | `/api/benchmark/run/` | admin, owner (development/CI only) |
 
 `make benchmark` (or `python manage.py run_benchmark`) replays Appendix A
 through the same services the API uses and prints every expected value with a
 PASS/FAIL verdict; it exits non-zero on any mismatch and runs in a transaction
-that is rolled back, so it never leaves benchmark data behind. The admin-only
-console at `/benchmark` runs the same scenario from the browser. The run screen
+that is rolled back, so it never leaves benchmark data behind. This harness is
+a development and CI tool: production settings disable the API, the seed
+command and the run command, and the browser console is not routed. The run screen
 at `/production/runs/<id>` shows the Leakage Radar report card and its
 cost-per-packet bridge, the ingredient trends and drift alerts. The admin order
 inbox shows the Loop Closer panel on a shortage, including the limiting input

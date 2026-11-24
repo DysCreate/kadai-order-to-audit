@@ -360,7 +360,31 @@
     "ok": "OK",
     "leakage": "Leakage this month",
     "leakageHint": "Top culprit: {{label}} ({{amount}})",
-    "noLeakage": "No adverse leakage this month"
+    "noLeakage": "No adverse leakage this month",
+    "salesman": {
+      "title": "My dashboard",
+      "subtitle": "Your orders, approvals and invoices in one place.",
+      "loadError": "Could not load your dashboard.",
+      "openOrders": "Open orders",
+      "openHint": "Submitted or approved",
+      "awaitingApproval": "Awaiting approval",
+      "awaitingApprovalHint": "With the admin",
+      "readyToDispatch": "Ready to dispatch",
+      "readyToDispatchHint": "Approved, not yet invoiced",
+      "invoices": "Invoices",
+      "cancelledHint": "{{count}} cancelled",
+      "monthTitle": "This month by customer",
+      "monthSubtitle": "Approved, invoiced and dispatched orders only.",
+      "monthEmpty": "No sales this month yet.",
+      "customerOrders": "{{count}} order(s)",
+      "recentInvoices": "Recent invoices",
+      "viewInvoices": "View all invoices",
+      "recentInvoicesEmpty": "No invoices yet.",
+      "recentOrders": "Recent orders",
+      "viewOrders": "View all orders",
+      "recentOrdersEmpty": "No orders yet. Create your first order.",
+      "newOrder": "New order"
+    }
   },
   "reports": {
     "title": "Reports",

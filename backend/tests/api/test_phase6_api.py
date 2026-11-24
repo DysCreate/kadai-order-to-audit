@@ -13,6 +13,7 @@ from io import StringIO
 
 import pytest
 from django.core.management import call_command
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.accounts.models import Role, User
@@ -245,6 +246,16 @@ def test_benchmark_console_allows_owner(client: object, scenario: dict, role: st
     assert response.json()["ok"] is True, [
         check for check in response.json()["checks"] if not check["passed"]
     ]
+
+
+@override_settings(ENABLE_BENCHMARK_TOOLS=False)
+def test_benchmark_console_is_absent_in_production(client: object, scenario: dict) -> None:
+    """Production hardening: the test console is not a deployed feature."""
+    _login(client, "admin")
+
+    response = client.post(reverse("benchmark-run"))  # type: ignore[attr-defined]
+
+    assert response.status_code == 404
 
 
 @pytest.mark.parametrize("username", ["salesman_a", "production", "accountant"])

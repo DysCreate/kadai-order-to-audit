@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kadai",
+  "compatibility_date": "2026-01-01",
+  "main": "worker/index.ts",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    // Run the Worker before static assets only for API calls; the SPA shell and
+    // hashed assets are served directly by Cloudflare.
+    "run_worker_first": ["/api", "/api/*"]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    // Replace with your Render service URL, e.g.
+    // "https://kadai-api.onrender.com". No trailing slash.
+    "API_ORIGIN": "https://kadai-api.onrender.com"
+  }
+}

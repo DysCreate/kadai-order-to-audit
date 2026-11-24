@@ -19,6 +19,7 @@ from apps.reports.framework import (
     KIND_DATE,
     KIND_MONEY,
     KIND_QTY,
+    KIND_TEXT,
     Column,
     ReportResult,
     display_value,
@@ -83,6 +84,23 @@ def test_excel_round_trips_rows_and_number_formats() -> None:
     assert sheet["D2"].number_format == "#,##0.00"
     assert sheet["C2"].number_format == "#,##0.000"
     assert [cell.value for cell in sheet[4]] == ["Total", None, 50.5, 3195.0]
+
+
+def test_exports_neutralise_formula_text() -> None:
+    """Phase 5 hardening: a master-data name cannot become a spreadsheet formula."""
+    result = ReportResult(
+        slug="formula",
+        title="Formula",
+        columns=(Column("name", "Name", KIND_TEXT), Column("value", "Value", KIND_MONEY)),
+        rows=(({"name": '=HYPERLINK("http://evil.example")', "value": Decimal("1.00")}),),
+    )
+
+    csv_rows = list(csv.reader(StringIO(render_csv(result).decode("utf-8"))))
+    assert csv_rows[1][0].startswith("'=")
+
+    sheet = load_workbook(BytesIO(render_excel(result))).active
+    assert sheet["A2"].value.startswith("=")
+    assert sheet["A2"].data_type == "s"
 
 
 def test_pdf_starts_with_a_pdf_header() -> None:

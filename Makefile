@@ -1,12 +1,28 @@
-.PHONY: up down seed seed-reset test test-api test-web e2e check lint typecheck benchmark reconcile shell psql logs build migrate
+.PHONY: up down up-prod down-prod logs-prod check-deploy seed seed-reset test test-api test-web e2e check lint typecheck benchmark reconcile shell psql logs build migrate
 
-# Start the stack
+# Start the development stack
 up:
 	docker compose up --build -d
 
-# Stop the stack
+# Stop the development stack
 down:
 	docker compose down
+
+# Start the production stack (requires a filled .env)
+up-prod:
+	docker compose -f docker-compose.prod.yml up --build -d
+
+# Stop the production stack
+down-prod:
+	docker compose -f docker-compose.prod.yml down
+
+# Tail production logs
+logs-prod:
+	docker compose -f docker-compose.prod.yml logs -f
+
+# Django production deployment checks
+check-deploy:
+	docker compose -f docker-compose.prod.yml exec api python manage.py check --deploy
 
 # Build images only
 build:

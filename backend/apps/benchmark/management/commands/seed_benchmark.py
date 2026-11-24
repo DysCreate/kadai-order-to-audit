@@ -6,7 +6,8 @@ first so the benchmark scenario can be replayed from scratch.
 
 from typing import Any
 
-from django.core.management.base import BaseCommand, CommandParser
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError, CommandParser
 
 from apps.benchmark.services import seed_benchmark
 from apps.inventory.services import stock_summary
@@ -23,6 +24,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> str | None:
+        if not settings.ENABLE_BENCHMARK_TOOLS:
+            raise CommandError("Benchmark seeding is disabled in this environment.")
         report = seed_benchmark(reset=bool(options["reset"]))
         self.stdout.write(
             self.style.SUCCESS(

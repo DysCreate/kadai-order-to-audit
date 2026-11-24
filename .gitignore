@@ -26,6 +26,10 @@ dist/
 # Docker / local volumes
 postgres_data/
 
+# Cloudflare Wrangler local state and secrets
+.wrangler/
+.dev.vars
+
 # Local agent skills
 .agents/
 
