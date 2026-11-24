@@ -40,6 +40,11 @@ environment variables, owner bootstrap and smoke tests. `render.yaml` describes
 the Render service; `frontend/wrangler.jsonc` and `frontend/worker/index.ts`
 describe the Worker.
 
+Pushes to `main` run CI first and then deploy the API and Worker through
+GitHub Actions (`.github/workflows/ci.yml`). Pull requests run the same checks
+without deploying. Repository variables, secrets and the Render deploy hook are
+documented in the deployment guide.
+
 A fresh production database has no users. Create the first owner once:
 
 ```bash

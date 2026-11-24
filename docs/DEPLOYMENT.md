@@ -136,7 +136,7 @@ while ignoring a forged header on a direct request to the Render hostname:
 openssl rand -base64 32
 ```
 
-Deploy:
+For the first manual deploy:
 
 ```bash
 cd frontend
@@ -148,6 +148,10 @@ npx wrangler login   # first time only
 npx wrangler secret put TRUSTED_PROXY_SECRET   # paste the shared value
 npx wrangler deploy
 ```
+
+After that, the GitHub Actions workflow deploys the Worker with the
+`API_ORIGIN` repository variable. Keep that variable in sync with the Render
+URL; it takes precedence over the placeholder in `wrangler.jsonc`.
 
 Wrangler prints the `https://<name>.<subdomain>.workers.dev` URL. Put that
 origin in Render's `CSRF_TRUSTED_ORIGINS` and redeploy the Render service.
@@ -162,7 +166,43 @@ Cloudflare's `_headers` file applies to static-asset responses only. Responses
 produced by the Worker (the `/api` proxy) therefore set their own
 `X-Content-Type-Options` and `Cache-Control` in `worker/index.ts`.
 
-## 4. Smoke test
+## 4. Continuous deployment (GitHub Actions)
+
+`.github/workflows/ci.yml` runs on:
+
+- every pull request that targets `main` — lint, typecheck, tests, build, and
+  security checks; **nothing is deployed**;
+- every push to `main` — the same checks, then a `deploy` job that runs only if
+  all of them pass. It triggers the Render deploy hook and polls `/api/health/`
+  for up to six minutes until Render reports this exact commit. The endpoint
+  returns Render's `RENDER_GIT_COMMIT`, so the workflow never mistakes the old
+  instance for the new one. Only then does it deploy the Cloudflare Worker and
+  smoke-test the SPA and API through it. If Render fails, the Worker is left on
+  the previous release.
+
+The Render service has `autoDeploy: false` in `render.yaml`, so the deploy hook
+in the workflow is the only production trigger. This prevents Render from
+shipping a commit that failed CI.
+
+Create these in GitHub under **Settings → Secrets and variables → Actions**:
+
+| Type | Name | Value |
+|------|------|-------|
+| Variable | `API_ORIGIN` | Render URL, e.g. `https://kadai-api.onrender.com` (no trailing slash) |
+| Variable | `SITE_URL` | Worker URL or custom domain, e.g. `https://kadai.example.workers.dev` |
+| Secret | `CLOUDFLARE_API_TOKEN` | Token with **Workers Scripts: Edit** for this account |
+| Secret | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID (Workers & Pages overview) |
+| Secret | `RENDER_DEPLOY_HOOK_URL` | Render service → **Settings → Deploy Hook** |
+
+`TRUSTED_PROXY_SECRET` is not needed by the workflow: it is configured once on
+the Worker with `wrangler secret put` and once in Render's environment.
+
+A deploy hook returns before Render has finished building. The smoke test waits
+for the new instance to answer, but if the workflow fails, check the Render
+**Events** log and Cloudflare Worker logs before re-running it. Re-running the
+workflow is safe: Render and Cloudflare both deploy the same commit.
+
+## 5. Smoke test
 
 Run these after the first deploy and after every production change:
 

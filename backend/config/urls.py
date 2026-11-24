@@ -1,13 +1,19 @@
 """URL configuration for Kadai backend."""
 
+import os
+
 from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 
 
 def health(request):  # type: ignore[type-arg]
-    """Health check endpoint."""
-    return JsonResponse({"status": "ok"})
+    """Health check endpoint.
+
+    ``commit`` lets the deployment workflow confirm that Render is serving the
+    commit it just triggered, not the previous instance.
+    """
+    return JsonResponse({"status": "ok", "commit": os.environ.get("RENDER_GIT_COMMIT", "")})
 
 
 urlpatterns = [

@@ -1,11 +1,18 @@
-name: CI
+name: CI/CD
 
 on:
-  # Pushes to dev, and pull requests that target main. Nothing else triggers CI.
+  # Validate pushes to dev, PRs that target main, and every push to main. The
+  # deploy job below runs only for a successful push to main.
   push:
-    branches: [dev]
+    branches: [dev, main]
   pull_request:
     branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A new PR commit supersedes the previous run. Never cancel a main build
+  # while it may be deploying.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
@@ -106,6 +113,9 @@ jobs:
       - name: Vitest
         run: npm test
 
+      - name: Production build
+        run: npm run build
+
   security:
     name: Security – Gitleaks
     runs-on: ubuntu-latest
@@ -122,3 +132,80 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    name: Deploy – Cloudflare + Render
+    # Production deploys only from main, and only after every CI job passes.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [backend, frontend, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: ${{ vars.SITE_URL }}
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      API_ORIGIN: ${{ vars.API_ORIGIN }}
+      SITE_URL: ${{ vars.SITE_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build and validate deploy configuration
+        run: |
+          : "${API_ORIGIN:?Set the repository variable API_ORIGIN to the Render URL}"
+          : "${SITE_URL:?Set the repository variable SITE_URL to the Cloudflare Worker URL}"
+          npm run build
+
+      - name: Trigger Render deploy
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          : "${RENDER_DEPLOY_HOOK_URL:?Set the RENDER_DEPLOY_HOOK_URL repository secret}"
+          curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+            --request POST "$RENDER_DEPLOY_HOOK_URL" > /dev/null
+
+      - name: Wait for Render to serve this commit
+        run: |
+          BASE="${API_ORIGIN%/}"
+          # The deploy hook returns before Render finishes. Poll the health
+          # endpoint until the instance reports this exact commit, so a failed
+          # or rolled-back Render deploy fails the workflow instead of passing
+          # against the previous instance.
+          for attempt in $(seq 1 36); do
+            body=$(curl --fail --silent --show-error --max-time 20 "$BASE/api/health/") || body=""
+            serving=$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)
+            if [ "$serving" = "$GITHUB_SHA" ]; then
+              echo "Render is serving $GITHUB_SHA"
+              exit 0
+            fi
+            echo "Attempt $attempt/36: serving ${serving:-unreachable}, waiting for $GITHUB_SHA"
+            sleep 10
+          done
+          echo "Render did not serve $GITHUB_SHA within 6 minutes." >&2
+          exit 1
+
+      - name: Deploy Cloudflare Worker
+        run: npx --yes wrangler@4.167.0 deploy --var "API_ORIGIN:$API_ORIGIN"
+
+      - name: Smoke test through the Worker
+        run: |
+          BASE="${SITE_URL%/}"
+          curl --fail --silent --show-error --max-time 20 "$BASE/api/health/" \
+            | jq --exit-status --arg sha "$GITHUB_SHA" '.status == "ok" and .commit == $sha'
+          curl --fail --silent --show-error --max-time 20 --output /dev/null "$BASE/"
+          echo "Worker and SPA are healthy on $GITHUB_SHA"

@@ -7,7 +7,8 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     healthCheckPath: /api/health/
-    autoDeploy: true
+    # .github/workflows/ci.yml triggers the deploy hook after CI passes.
+    autoDeploy: false
     envVars:
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.production

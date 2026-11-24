@@ -1,0 +1,5 @@
+# False positives: hard-coded test passwords in the original bootstrap tests.
+# The literals were replaced with generated values in a later commit; these
+# fingerprints keep the historical commit from failing the PR scan.
+5fb0993bb47a21af2237f99a6493062618c2fd9d:backend/tests/integration/test_bootstrap_admin.py:generic-api-key:14
+5fb0993bb47a21af2237f99a6493062618c2fd9d:backend/tests/integration/test_bootstrap_admin.py:generic-api-key:39
