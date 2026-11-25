@@ -127,9 +127,7 @@ def invitation_for_token(token: str) -> Invitation:
 def accept_invitation(*, token: str, username: str, password: str) -> User:
     """Create the invited user and mark the invitation used."""
     try:
-        invitation = Invitation.objects.select_for_update().get(
-            token_hash=_token_hash(token)
-        )
+        invitation = Invitation.objects.select_for_update().get(token_hash=_token_hash(token))
     except Invitation.DoesNotExist as exc:
         raise DomainError("This invitation is invalid or has already been used.") from exc
     if invitation.accepted_at is not None:
