@@ -18,7 +18,8 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import Organization, Role, User
+from core.tenancy import default_organization_id
 
 
 class Command(BaseCommand):
@@ -44,6 +45,7 @@ class Command(BaseCommand):
         except ValidationError as exc:
             raise CommandError("ADMIN_PASSWORD rejected: " + " ".join(exc.messages)) from exc
 
+        organization = Organization.objects.get(pk=default_organization_id())
         user = User.objects.filter(username=username).first()
         if user is None:
             User.objects.create_superuser(
@@ -51,6 +53,7 @@ class Command(BaseCommand):
                 email=email,
                 password=password,
                 role=Role.OWNER,
+                organization=organization,
             )
             self.stdout.write(self.style.SUCCESS(f"Created owner {username}."))
             return
@@ -66,6 +69,7 @@ class Command(BaseCommand):
 
         user.email = email or user.email
         user.role = Role.OWNER
+        user.organization = organization
         user.is_staff = True
         user.is_superuser = True
         user.set_password(password)

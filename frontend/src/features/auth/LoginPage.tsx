@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import LanguageToggle from '../../components/LanguageToggle'
 import { login } from './authApi'
 import { useAuth } from './AuthContext'
 
@@ -30,7 +31,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="relative min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <LanguageToggle className="absolute right-4 top-4" />
+
       <div className="w-full max-w-sm space-y-8">
         <div>
           <h1 className="text-3xl font-bold text-blue-800 text-center">Kadai</h1>
@@ -89,6 +92,13 @@ export default function LoginPage() {
             {submitting ? '…' : t('login.submit')}
           </button>
         </form>
+
+        <p className="text-center text-sm text-gray-600">
+          {t('login.noAccount')}{' '}
+          <Link to="/register" className="font-medium text-blue-800 hover:underline">
+            {t('login.createOrganization')}
+          </Link>
+        </p>
       </div>
     </div>
   )

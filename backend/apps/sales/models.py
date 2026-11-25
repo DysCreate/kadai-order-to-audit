@@ -22,6 +22,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from core.tenancy import OrganizationScopedModel
+
 
 class OrderState(models.TextChoices):
     SUBMITTED = "SUBMITTED", "Submitted"
@@ -37,7 +39,7 @@ class DocumentType(models.TextChoices):
     CREDIT_NOTE = "CN", "Credit note"
 
 
-class DocumentSequence(models.Model):
+class DocumentSequence(OrganizationScopedModel):
     """Per-financial-year counter for one document type.
 
     Rows are locked with SELECT ... FOR UPDATE before a number is taken, so two
@@ -53,7 +55,7 @@ class DocumentSequence(models.Model):
         ordering = ["doc_type", "financial_year"]
         constraints = [
             models.UniqueConstraint(
-                fields=["doc_type", "financial_year"],
+                fields=["organization", "doc_type", "financial_year"],
                 name="uniq_document_sequence",
             ),
         ]
@@ -62,7 +64,7 @@ class DocumentSequence(models.Model):
         return f"{self.doc_type}/{self.financial_year}: {self.last_number}"
 
 
-class Order(models.Model):
+class Order(OrganizationScopedModel):
     """A salesman's sales order, from submit to dispatch.
 
     ``client_uuid`` is generated on the device before the request, so a retry
@@ -70,7 +72,7 @@ class Order(models.Model):
     ``number`` is allocated under a row lock from ``DocumentSequence``.
     """
 
-    number = models.CharField(max_length=16, unique=True)
+    number = models.CharField(max_length=16)
     client_uuid = models.UUIDField(unique=True)
     customer = models.ForeignKey(
         "masters.Customer",
@@ -104,6 +106,12 @@ class Order(models.Model):
     class Meta:
         db_table = "sales_order"
         ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "number"],
+                name="uniq_order_org_number",
+            ),
+        ]
         indexes = [
             models.Index(fields=["state", "created_at"], name="idx_order_state_created"),
             models.Index(fields=["customer", "created_at"], name="idx_order_customer_created"),
@@ -113,7 +121,7 @@ class Order(models.Model):
         return f"{self.number} ({self.state})"
 
 
-class OrderLine(models.Model):
+class OrderLine(OrganizationScopedModel):
     """One requested item, with the price resolved at submit time.
 
     ``unit_price`` is a snapshot: a later price-list edit does not change an
@@ -141,7 +149,7 @@ class OrderLine(models.Model):
         return f"{self.item.name} {self.qty} @ {self.unit_price}"
 
 
-class Invoice(models.Model):
+class Invoice(OrganizationScopedModel):
     """A posted GST invoice. Immutable once written (trigger enforced).
 
     ``place_of_supply_state_code`` is the customer's state; ``is_interstate``
@@ -149,7 +157,7 @@ class Invoice(models.Model):
     even if the customer's state is corrected later.
     """
 
-    number = models.CharField(max_length=16, unique=True)
+    number = models.CharField(max_length=16)
     order = models.OneToOneField(
         Order,
         on_delete=models.PROTECT,
@@ -181,6 +189,12 @@ class Invoice(models.Model):
     class Meta:
         db_table = "sales_invoice"
         ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "number"],
+                name="uniq_invoice_org_number",
+            ),
+        ]
         indexes = [
             models.Index(fields=["customer", "invoice_date"], name="idx_invoice_customer_date"),
         ]
@@ -189,7 +203,7 @@ class Invoice(models.Model):
         return self.number
 
 
-class InvoiceLine(models.Model):
+class InvoiceLine(OrganizationScopedModel):
     """One taxable line, with its HSN, rate and per-line tax rounded to paise."""
 
     invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name="lines")
@@ -217,7 +231,7 @@ class InvoiceLine(models.Model):
         return f"{self.description} {self.qty}"
 
 
-class Dispatch(models.Model):
+class Dispatch(OrganizationScopedModel):
     """A finished-goods dispatch against an invoice.
 
     The dispatch document is the ledger source (source_type = dispatch,
@@ -245,7 +259,7 @@ class Dispatch(models.Model):
         return f"Dispatch {self.pk} for {self.invoice.number}"
 
 
-class DispatchLine(models.Model):
+class DispatchLine(OrganizationScopedModel):
     """Quantity of one invoice line that left the factory."""
 
     dispatch = models.ForeignKey(Dispatch, on_delete=models.PROTECT, related_name="lines")
@@ -270,7 +284,7 @@ class DispatchLine(models.Model):
         return f"{self.invoice_line.description} {self.qty}"
 
 
-class CreditNote(models.Model):
+class CreditNote(OrganizationScopedModel):
     """A credit note that cancels part or all of an invoice.
 
     Issuing a credit note never edits the invoice. When the credited quantity
@@ -278,7 +292,7 @@ class CreditNote(models.Model):
     not stored), and an optional restock returns the goods to finished stock.
     """
 
-    number = models.CharField(max_length=16, unique=True)
+    number = models.CharField(max_length=16)
     invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name="credit_notes")
     reason = models.CharField(max_length=255)
     restock = models.BooleanField(default=False)
@@ -300,12 +314,18 @@ class CreditNote(models.Model):
     class Meta:
         db_table = "sales_credit_note"
         ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "number"],
+                name="uniq_credit_note_org_number",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.number
 
 
-class CreditNoteLine(models.Model):
+class CreditNoteLine(OrganizationScopedModel):
     """Credited quantity and tax for one invoice line."""
 
     credit_note = models.ForeignKey(CreditNote, on_delete=models.PROTECT, related_name="lines")

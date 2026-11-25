@@ -17,7 +17,7 @@ from decimal import Decimal
 from django.db import connection, transaction
 from psycopg import sql
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import Organization, Role, User
 from apps.accounts.services import create_user
 from apps.inventory.models import StockLedger
 from apps.inventory.services import post_opening_balance
@@ -35,6 +35,7 @@ from apps.masters.services import (
 )
 from apps.production.models import BOM
 from apps.production.services import BOMLineInput, create_bom_version
+from core.tenancy import default_organization_id
 
 UOMS: tuple[tuple[str, str], ...] = (
     ("Kilogram", "kg"),
@@ -179,11 +180,20 @@ def reset_benchmark_data() -> None:
 
 def _ensure_user(username: str, role: str) -> User:
     """Create the seed user, or align an existing user's role and flags."""
-    user = User.objects.filter(username=username).first()
+    organization = Organization.objects.get(pk=default_organization_id())
+    user: User | None = User.objects.filter(username=username).first()
     if user is None:
-        return create_user(username=username, password=username, role=role)
+        return create_user(
+            username=username,
+            password=username,
+            role=role,
+            organization=organization,
+        )
 
     changed = False
+    if user.organization_id != organization.pk:
+        user.organization = organization
+        changed = True
     if user.role != role:
         user.role = role
         changed = True

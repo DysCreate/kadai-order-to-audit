@@ -1,5 +1,6 @@
 import { useNavigate, Navigate, Routes, Route, NavLink } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import LanguageToggle from './LanguageToggle'
 import { useAuth } from '../features/auth/AuthContext'
 import { logout } from '../features/auth/authApi'
 import { useOnline, useOutbox } from '../features/sales/offline/useOutbox'
@@ -14,6 +15,7 @@ import PaymentsPage from '../features/payments/PaymentsPage'
 import DashboardPage from '../features/dashboard/DashboardPage'
 import SalesmanDashboardPage from '../features/dashboard/SalesmanDashboardPage'
 import ReportsPage from '../features/reports/ReportsPage'
+import TeamPage from '../features/team/TeamPage'
 import NotFoundPage from './NotFoundPage'
 
 const NAV_ITEMS: { to: string; labelKey: string; roles: string[] }[] = [
@@ -26,7 +28,8 @@ const NAV_ITEMS: { to: string; labelKey: string; roles: string[] }[] = [
   { to: '/invoices', labelKey: 'nav.invoices', roles: ['salesman', 'admin', 'accountant', 'owner'] },
   { to: '/payments', labelKey: 'nav.payments', roles: ['admin', 'accountant', 'owner'] },
   { to: '/production', labelKey: 'nav.production', roles: ['production', 'admin', 'owner'] },
-  { to: '/reports', labelKey: 'nav.reports', roles: ['admin', 'production', 'accountant', 'owner'] }
+  { to: '/reports', labelKey: 'nav.reports', roles: ['admin', 'production', 'accountant', 'owner'] },
+  { to: '/team', labelKey: 'nav.team', roles: ['admin', 'owner'] }
 ]
 
 export type Landing = 'salesman' | 'production' | 'dashboard'
@@ -47,15 +50,9 @@ export function landingForRole(role: string): Landing {
 export default function Layout() {
   const { user, setUser } = useAuth()
   const navigate = useNavigate()
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const online = useOnline()
   const { pending, syncing, error: syncError, sync } = useOutbox(user?.username)
-
-  function changeLanguage(value: string) {
-    void i18n.changeLanguage(value)
-    localStorage.setItem('kadai.lang', value)
-    document.documentElement.lang = value
-  }
 
   async function handleLogout() {
     try {
@@ -80,8 +77,9 @@ export default function Layout() {
       </a>
       {/* Sidebar */}
       <aside className="w-full flex-shrink-0 bg-blue-900 text-white md:flex md:w-56 md:flex-col">
-        <div className="px-6 py-5 text-2xl font-bold tracking-tight border-b border-blue-700">
-          Kadai
+        <div className="flex items-center justify-between border-b border-blue-700 px-6 py-5">
+          <div className="text-2xl font-bold tracking-tight">Kadai</div>
+          <LanguageToggle className="md:hidden" />
         </div>
         <nav
           aria-label={t('nav.primary')}
@@ -126,18 +124,8 @@ export default function Layout() {
               {t('offline.syncFailed')}
             </p>
           )}
-          <label className="mb-2 block text-xs text-blue-300">
-            <span className="mb-1 block">{t('language.label')}</span>
-            <select
-              value={i18n.language.startsWith('ta') ? 'ta' : 'en'}
-              onChange={(event) => changeLanguage(event.target.value)}
-              className="min-h-[36px] w-full rounded border-blue-700 bg-blue-800 px-2 py-1 text-sm text-white"
-            >
-              <option value="en">English</option>
-              <option value="ta">தமிழ்</option>
-            </select>
-          </label>
           <div className="text-xs text-blue-300 mb-2">
+            {user?.organization?.name && <div>{user.organization.name}</div>}
             {user?.username} &middot; {user?.role}
           </div>
           <button
@@ -150,32 +138,38 @@ export default function Layout() {
       </aside>
 
       {/* Main content */}
-      <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto focus:outline-none">
-        <Routes>
-          <Route
-            path="/"
-            element={
-              landing === 'salesman' ? (
-                <SalesmanDashboardPage />
-              ) : landing === 'production' ? (
-                <Navigate to="/production" replace />
-              ) : (
-                <DashboardPage />
-              )
-            }
-          />
-          <Route path="/orders/new" element={<NewOrderPage />} />
-          <Route path="/orders" element={<MyOrdersPage />} />
-          <Route path="/admin/orders" element={<AdminOrderInboxPage />} />
-          <Route path="/invoices" element={<InvoiceListPage />} />
-          <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
-          <Route path="/payments" element={<PaymentsPage />} />
-          <Route path="/production" element={<RunListPage />} />
-          <Route path="/production/runs/:id" element={<RunDetailPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </main>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <header className="hidden flex-shrink-0 items-center justify-end border-b border-gray-200 bg-white px-4 py-2 md:flex">
+          <LanguageToggle />
+        </header>
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto focus:outline-none">
+          <Routes>
+            <Route
+              path="/"
+              element={
+                landing === 'salesman' ? (
+                  <SalesmanDashboardPage />
+                ) : landing === 'production' ? (
+                  <Navigate to="/production" replace />
+                ) : (
+                  <DashboardPage />
+                )
+              }
+            />
+            <Route path="/orders/new" element={<NewOrderPage />} />
+            <Route path="/orders" element={<MyOrdersPage />} />
+            <Route path="/admin/orders" element={<AdminOrderInboxPage />} />
+            <Route path="/invoices" element={<InvoiceListPage />} />
+            <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
+            <Route path="/payments" element={<PaymentsPage />} />
+            <Route path="/production" element={<RunListPage />} />
+            <Route path="/production/runs/:id" element={<RunDetailPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/team" element={<TeamPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </main>
+      </div>
     </div>
   )
 }

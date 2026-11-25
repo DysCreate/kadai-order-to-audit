@@ -16,6 +16,7 @@ from django.db import models
 from django.utils import timezone
 
 from apps.masters.models import Item
+from core.tenancy import OrganizationScopedModel
 
 
 class MovementType(models.TextChoices):
@@ -34,7 +35,7 @@ class SourceType(models.TextChoices):
     CREDIT_NOTE = "credit_note", "Credit note"
 
 
-class StockLedger(models.Model):
+class StockLedger(OrganizationScopedModel):
     """One append-only stock movement for one item.
 
     ``qty`` is signed: positive for stock in (OPENING, RECEIPT), negative for
@@ -76,7 +77,7 @@ class StockLedger(models.Model):
         return f"{self.item.name} {self.qty} ({self.movement_type})"
 
 
-class StockBalance(models.Model):
+class StockBalance(OrganizationScopedModel):
     """Denormalised per-item balance, always equal to SUM(stock_ledger).
 
     Rows are locked with SELECT ... FOR UPDATE by the services layer, in
@@ -111,7 +112,7 @@ class StockBalance(models.Model):
         return f"{self.item.name}: {self.qty} @ {self.value}"
 
 
-class Purchase(models.Model):
+class Purchase(OrganizationScopedModel):
     """Goods received from a supplier.
 
     The purchase is the source document for its RECEIPT ledger rows
@@ -146,7 +147,7 @@ class Purchase(models.Model):
         return f"Purchase {self.pk} from {self.supplier.name}"
 
 
-class PurchaseLine(models.Model):
+class PurchaseLine(OrganizationScopedModel):
     """One item received on a purchase, at its purchase rate."""
 
     purchase = models.ForeignKey(Purchase, on_delete=models.CASCADE, related_name="lines")
@@ -173,7 +174,7 @@ class PurchaseLine(models.Model):
         return f"{self.item.name} {self.qty} @ {self.unit_cost}"
 
 
-class StockAdjustment(models.Model):
+class StockAdjustment(OrganizationScopedModel):
     """Manual stock correction with a mandatory reason.
 
     The adjustment row is the source document for the ledger movement it
