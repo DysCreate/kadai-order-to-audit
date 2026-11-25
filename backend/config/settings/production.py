@@ -101,7 +101,7 @@ CACHES = {
     }
 }
 
-ENABLE_BENCHMARK_TOOLS = False
+ENABLE_BENCHMARK_TOOLS = os.environ.get("ENABLE_BENCHMARK_TOOLS", "false").lower() == "true"
 
 # ---------------------------------------------------------------------------
 # Logging: one line per request/error on stdout, which the platform collects.
