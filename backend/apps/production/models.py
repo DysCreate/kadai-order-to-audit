@@ -18,6 +18,7 @@ from django.db import models
 from django.utils import timezone
 
 from apps.masters.models import Item
+from core.tenancy import OrganizationScopedModel
 
 
 class BOMLineRole(models.TextChoices):
@@ -49,7 +50,7 @@ class VarianceKind(models.TextChoices):
     YIELD = "yield", "Output yield"
 
 
-class BOM(models.Model):
+class BOM(OrganizationScopedModel):
     """One version of a product's bill of materials.
 
     ``batch_output_qty`` is the expected good output of one batch in the
@@ -84,7 +85,7 @@ class BOM(models.Model):
         return f"{self.product.name} v{self.version}"
 
 
-class BOMLine(models.Model):
+class BOMLine(OrganizationScopedModel):
     """One input of a BOM version, per batch, in the item's base unit.
 
     ``standard_rate`` is the standard cost of one base unit at this BOM
@@ -122,7 +123,7 @@ class BOMLine(models.Model):
         return f"{self.item.name} {self.qty_per_batch} per batch"
 
 
-class ProductionRun(models.Model):
+class ProductionRun(OrganizationScopedModel):
     """A production run, from planned quantities to a completed batch.
 
     ``ledger_entry_ids`` records the ledger rows the run currently owns, so an
@@ -171,7 +172,7 @@ class ProductionRun(models.Model):
         return f"Run {self.pk} {self.product.name} ({self.state})"
 
 
-class ProductionRunLine(models.Model):
+class ProductionRunLine(OrganizationScopedModel):
     """Planned, issued and actual quantity for one input of a run.
 
     ``actual_qty`` is recorded at completion; for raw materials it equals what
@@ -215,7 +216,7 @@ class ProductionRunLine(models.Model):
         return f"{self.item.name}: planned {self.planned_qty}"
 
 
-class RunVarianceSnapshot(models.Model):
+class RunVarianceSnapshot(OrganizationScopedModel):
     """Stored variance for one line (or the yield) of a completed run.
 
     Snapshots are written once per completion and are never recalculated from

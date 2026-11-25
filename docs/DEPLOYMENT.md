@@ -56,6 +56,12 @@ service, Docker build, health check and non-secret environment variables.
    | `CSRF_TRUSTED_ORIGINS` | The Worker URL, e.g. `https://kadai.example.workers.dev` (add a custom domain later too) |
    | `CORS_ALLOWED_ORIGINS` | Leave empty: the SPA and API share the Worker origin |
    | `TRUSTED_PROXY_SECRET` | A long random value, identical on Render and the Worker (see step 3) |
+   | `SITE_URL` | The Worker URL or custom domain, used in invitation emails |
+   | `DEFAULT_FROM_EMAIL` | Sender address for invitations, e.g. `Kadai <no-reply@yourdomain.com>` |
+   | `EMAIL_HOST` | SMTP host from your email provider |
+   | `EMAIL_PORT` | SMTP port, normally `587` |
+   | `EMAIL_HOST_USER` | SMTP username |
+   | `EMAIL_HOST_PASSWORD` | SMTP password or API key |
 
    `render.yaml` already sets `SECRET_KEY` (generated), `RUN_MIGRATIONS=true`,
    `GUNICORN_WORKERS=1`, `GUNICORN_THREADS=4` and
@@ -73,31 +79,42 @@ service, Docker build, health check and non-secret environment variables.
    curl -fsS https://kadai-api.onrender.com/api/health/
    ```
 
-6. Create the first owner. A production database has **no demo users** and the
-   seed command is disabled. From the Render **Shell**:
+6. Create users. A production database has **no demo users** and the seed
+   command is disabled.
 
-   ```bash
-   ADMIN_USERNAME=owner \
-   ADMIN_PASSWORD='a-long-unique-password' \
-   ADMIN_EMAIL='owner@example.com' \
-   python manage.py bootstrap_admin
-   ```
+   - **New deployment:** open the Worker URL, choose **Create an organization**,
+     and register. The creator becomes the owner of that organization.
+   - **Existing data / first default organization:** run the one-time bootstrap
+     from the Render **Shell**:
 
-   The command validates the password with Django's validators and creates an
-   owner superuser. Re-running it is a no-op; `--update-password` promotes an
-   existing user and resets the password. If the Shell is unavailable, run the
-   same command from a machine that can reach Neon:
+     ```bash
+     ADMIN_USERNAME=owner \
+     ADMIN_PASSWORD='a-long-unique-password' \
+     ADMIN_EMAIL='owner@example.com' \
+     python manage.py bootstrap_admin
+     ```
 
-   ```bash
-   cd backend
-   DATABASE_URL='postgresql://...neon...' \
-   DJANGO_SETTINGS_MODULE=config.settings.production \
-   ADMIN_USERNAME=owner ADMIN_PASSWORD='...' \
-   python manage.py bootstrap_admin
-   ```
+     The command validates the password with Django's validators, creates the
+     default organization if needed, and makes the user its owner superuser.
+     Re-running it is a no-op; `--update-password` promotes an existing user and
+     resets the password. If the Shell is unavailable, run the same command
+     from a machine that can reach Neon:
+
+     ```bash
+     cd backend
+     DATABASE_URL='postgresql://...neon...' \
+     DJANGO_SETTINGS_MODULE=config.settings.production \
+     ADMIN_USERNAME=owner ADMIN_PASSWORD='...' \
+     python manage.py bootstrap_admin
+     ```
+
+   Owners invite admins from the app's **Team** screen. Admins invite salesmen,
+   accountants and production staff. Invitations are emailed and accepted at
+   `/invite/<token>`.
 
    Django admin remains available at
-   `https://kadai-api.onrender.com/admin/` for owner/master-data work.
+   `https://kadai-api.onrender.com/admin/` for owner/master-data work, scoped to
+   the signed-in owner's organization.
 
 ### Free-plan behavior
 
@@ -224,15 +241,30 @@ curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/orders/"
 
 Then in the browser:
 
-1. Log in as the owner created above.
-2. Create a customer, item and order; confirm the PDF download works
+1. Register a new organization; confirm the creator lands on the dashboard as
+   owner.
+2. Open **Team**, invite an admin, follow the emailed link, and accept it.
+3. Log in as that admin and confirm the Team screen offers salesman, accountant
+   and production invitations, not admin.
+4. Create a customer, item and order; confirm the PDF download works
    (WeasyPrint is installed in the image).
-3. Log in as a salesman and confirm customer scoping still limits the catalog
+5. Log in as a salesman and confirm customer scoping still limits the catalog
    and orders.
-4. Enter a wrong password repeatedly and confirm the throttle responds with
+6. Enter a wrong password repeatedly and confirm the throttle responds with
    HTTP 429 before locking the account.
-5. Check Render logs for 5xx errors and Cloudflare → Workers → Logs for proxy
+7. Check Render logs for 5xx errors and Cloudflare → Workers → Logs for proxy
    failures.
+
+### Email delivery
+
+Invitations use Django's SMTP backend, so any transactional email provider
+works (for example Resend, Brevo, Postmark or Amazon SES). Use the provider's
+SMTP host, port, username and API key/password in the Render environment. Set
+`SITE_URL` to the public Worker origin; it becomes the invitation link base.
+
+If `EMAIL_HOST` is unset, Django falls back to the console backend and the
+invitation link is printed in the Render log instead of being delivered.
+Configure SMTP before onboarding real users.
 
 ## Troubleshooting
 

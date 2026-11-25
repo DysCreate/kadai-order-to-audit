@@ -13,8 +13,10 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from core.tenancy import OrganizationScopedModel
 
-class AuditLog(models.Model):
+
+class AuditLog(OrganizationScopedModel):
     """Append-only record of who changed what, when, and from/to what."""
 
     user = models.ForeignKey(

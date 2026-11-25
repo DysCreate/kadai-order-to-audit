@@ -14,6 +14,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from core.tenancy import OrganizationScopedModel
+
 
 class PaymentMethod(models.TextChoices):
     CASH = "cash", "Cash"
@@ -22,7 +24,7 @@ class PaymentMethod(models.TextChoices):
     CHEQUE = "cheque", "Cheque"
 
 
-class Payment(models.Model):
+class Payment(OrganizationScopedModel):
     """Money received from a customer, with optional allocations to invoices."""
 
     customer = models.ForeignKey(
@@ -65,7 +67,7 @@ class Payment(models.Model):
         return f"{self.customer.name} {self.amount} on {self.payment_date}"
 
 
-class PaymentAllocation(models.Model):
+class PaymentAllocation(OrganizationScopedModel):
     """How much of a payment settles one invoice."""
 
     payment = models.ForeignKey(Payment, on_delete=models.PROTECT, related_name="allocations")

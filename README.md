@@ -2,6 +2,43 @@
 
 > NIT Tiruchirappalli CDI Winter Internship 2026 · Prototype for a South Indian snack factory
 
+## Live deployment
+
+Kadai is packaged for a free-tier managed deployment:
+
+```
+Browser → Cloudflare Worker (React build + /api proxy) → Render (Django/gunicorn) → Neon (PostgreSQL 16)
+```
+
+| Piece | Service | Role |
+|-------|---------|------|
+| SPA and `/api` forwarder | Cloudflare Workers | Serves the built React app and proxies only `/api/*` to Django |
+| API and invoice PDFs | Render (free Docker plan) | Gunicorn, WhiteNoise, migrations on boot, `render.yaml` |
+| Database | Neon (free) | PostgreSQL 16 through the pooled connection string |
+
+Deploys run from `main` only after CI passes; pull requests never deploy. The
+full runbook, environment variables and smoke tests are in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+> **Live URL:** add the Cloudflare Worker URL or custom domain here after the
+> first deploy. Use the same origin for the `SITE_URL` repository variable and
+> Render's `CSRF_TRUSTED_ORIGINS`.
+
+### Go-live checklist
+
+- [ ] Neon pooled `DATABASE_URL` uses `sslmode=require`.
+- [ ] Render has `SECRET_KEY`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`,
+      `SITE_URL`, the SMTP variables and the same `TRUSTED_PROXY_SECRET` as the
+      Worker.
+- [ ] The Cloudflare Worker has `API_ORIGIN` and the `TRUSTED_PROXY_SECRET`
+      secret.
+- [ ] `curl -fsS https://<worker>/api/health/` returns `{"status": "ok"}`.
+- [ ] Register the first organization, or run `bootstrap_admin` once, then invite
+      an admin from **Team**.
+- [ ] Place one order through dispatch, open the invoice PDF and confirm the
+      totals.
+- [ ] Configure a backup (Neon restore window or a scheduled `pg_dump`).
+
 ## Quick Start
 
 ```bash
@@ -45,12 +82,24 @@ GitHub Actions (`.github/workflows/ci.yml`). Pull requests run the same checks
 without deploying. Repository variables, secrets and the Render deploy hook are
 documented in the deployment guide.
 
-A fresh production database has no users. Create the first owner once:
+A fresh production database has no users. Visitors create their own
+organization at `/register`; the creator becomes that organization's owner.
+The owner can then invite admins from the **Team** screen, and each admin can
+invite salesmen, accountants and production staff. Invitations are sent by
+email and accepted at `/invite/<token>`.
+
+For an existing deployment that needs a default organization and owner, run
+the bootstrap command once:
 
 ```bash
 ADMIN_USERNAME=owner ADMIN_PASSWORD='a-long-unique-password' \
   python manage.py bootstrap_admin
 ```
+
+Configure SMTP in production with `EMAIL_HOST`, `EMAIL_PORT`,
+`EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL` and `SITE_URL`;
+without them Django uses the console email backend and invitations are written
+to the server log. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ### Self-hosted Docker Compose
 
@@ -86,14 +135,19 @@ it. In the managed deployment it is available on the Render hostname at
 | Auth | Django session auth |
 | PDF | WeasyPrint |
 | Tests | pytest-django, Vitest, Playwright |
-| Run | Docker Compose |
+| Run (local and self-hosted) | Docker Compose |
+| Managed deploy | Cloudflare Workers + Render + Neon |
 
 ## Commands
 
 | Command | What it does |
 |---------|-------------|
-| `make up` | Start all services |
-| `make down` | Stop all services |
+| `make up` | Start the development stack |
+| `make down` | Stop the development stack |
+| `make up-prod` | Start the self-hosted production stack |
+| `make down-prod` | Stop the production stack |
+| `make logs-prod` | Tail production logs |
+| `make check-deploy` | Run Django's production checks |
 | `make seed` | Load benchmark data |
 | `make seed-reset` | Reset and reload benchmark data |
 | `make test` | Run backend tests |
@@ -120,6 +174,15 @@ it. In the managed deployment it is available on the Render hostname at
 | Offline ordering (IndexedDB cache, outbox, pending badge, sync) | ✅ Phase 7 |
 | Low-stock alerts (per-item reorder level) | ✅ Phase 7 |
 | Tamil UI (language switcher, all screens) | ✅ Phase 7 |
+| Organization onboarding (self-registration, email invites, per-org data) | ✅ Phase 8 |
+| Production hardening (gunicorn, WhiteNoise, CSP, login throttle, prod settings) | ✅ Phase 8 |
+| Managed deployment (Cloudflare + Render + Neon, CI/CD) | ✅ Phase 8 |
+
+## Screenshots
+
+| Salesman order (mobile) | Invoice with GST | Run variance and cost |
+|---|---|---|
+| ![](docs/evidence/qa/order-submitted.png) | ![](docs/evidence/qa/invoice-intra-state.png) | ![](docs/evidence/qa/run-variance.png) |
 
 ## Phase 1 Inventory API
 
@@ -445,6 +508,21 @@ Phase 7 adds these offline and alerting readings:
     requirement (flour 40 kg, oil 10 L, spice mix 1.2 kg, pouches 200, cartons
     10) and leaves finished goods at zero. An operator-set non-zero level always
     wins over the BOM fallback.
+
+## Known limitations
+
+- Render's free instances sleep after about 15 minutes without traffic; the
+  first request can take 30–60 seconds. Open the app once before a shift.
+- Neon's free plan has storage and compute limits. Check the console before
+  onboarding real data, and keep a backup independent of the free plan.
+- Production runs one gunicorn worker with four threads. There is no Celery,
+  Redis or background worker by design; long work is synchronous.
+- `seed_benchmark`, `run_benchmark`, the Benchmark Console and its API are
+  disabled in production settings.
+- Invitations need SMTP. Without the `EMAIL_*` variables Django writes the
+  invitation link to the server log instead of sending it.
+- The managed and self-hosted paths share the same code but use different
+  environment files; pick one per deployment.
 
 ## Benchmark Results
 

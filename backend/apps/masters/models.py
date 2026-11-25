@@ -12,23 +12,35 @@ from decimal import Decimal
 from django.core.validators import MinValueValidator
 from django.db import models
 
+from core.tenancy import OrganizationScopedModel
 
-class UoM(models.Model):
+
+class UoM(OrganizationScopedModel):
     """Unit of Measure (kg, g, L, mL, piece, packet, carton)."""
 
-    name = models.CharField(max_length=50, unique=True)
-    symbol = models.CharField(max_length=10, unique=True)
+    name = models.CharField(max_length=50)
+    symbol = models.CharField(max_length=10)
 
     class Meta:
         db_table = "masters_uom"
         verbose_name = "Unit of Measure"
         ordering = ["symbol"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                name="uniq_uom_org_name",
+            ),
+            models.UniqueConstraint(
+                fields=["organization", "symbol"],
+                name="uniq_uom_org_symbol",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.symbol
 
 
-class UoMConversion(models.Model):
+class UoMConversion(OrganizationScopedModel):
     """Global conversion factor: ``1 from_uom = factor to_uom``.
 
     Only one direction needs to be stored (kg -> g); ``UnitConverter``
@@ -43,7 +55,7 @@ class UoMConversion(models.Model):
         db_table = "masters_uom_conversion"
         constraints = [
             models.UniqueConstraint(
-                fields=["from_uom", "to_uom"],
+                fields=["organization", "from_uom", "to_uom"],
                 name="uniq_uom_conversion",
             ),
             models.CheckConstraint(
@@ -62,14 +74,14 @@ class ItemType(models.TextChoices):
     FG = "FG", "Finished Goods"
 
 
-class Item(models.Model):
+class Item(OrganizationScopedModel):
     """Stock-keeping unit.
 
     ``uom`` is the item's base unit. Every ledger quantity for the item is
     stored in this unit.
     """
 
-    name = models.CharField(max_length=200, unique=True)
+    name = models.CharField(max_length=200)
     item_type = models.CharField(max_length=20, choices=ItemType.choices)
     uom = models.ForeignKey(UoM, on_delete=models.PROTECT, related_name="items")
     hsn_code = models.CharField(max_length=20, blank=True)
@@ -103,6 +115,10 @@ class Item(models.Model):
         db_table = "masters_item"
         ordering = ["name"]
         constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                name="uniq_item_org_name",
+            ),
             models.CheckConstraint(
                 check=models.Q(gst_rate__gte=0),
                 name="chk_item_gst_rate_non_negative",
@@ -121,7 +137,7 @@ class Item(models.Model):
         return self.name
 
 
-class ItemUoMConversion(models.Model):
+class ItemUoMConversion(OrganizationScopedModel):
     """Item-specific conversion: ``1 uom = factor * item.uom``.
 
     Example: for the Murukku 200 g item (base unit packet), one carton is
@@ -149,16 +165,22 @@ class ItemUoMConversion(models.Model):
         return f"1 {self.uom.symbol} = {self.factor} {self.item.uom.symbol} ({self.item.name})"
 
 
-class Supplier(models.Model):
+class Supplier(OrganizationScopedModel):
     """Raw-material supplier."""
 
-    name = models.CharField(max_length=200, unique=True)
+    name = models.CharField(max_length=200)
     gstin = models.CharField(max_length=15, blank=True)
     state_code = models.CharField(max_length=2, default="33")
 
     class Meta:
         db_table = "masters_supplier"
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                name="uniq_supplier_org_name",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -170,21 +192,27 @@ class CustomerType(models.TextChoices):
     WHOLESALE = "wholesale", "Wholesale"
 
 
-class PriceList(models.Model):
+class PriceList(OrganizationScopedModel):
     """Named set of selling prices. Exactly one list may be the default."""
 
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100)
     is_default = models.BooleanField(default=False)
 
     class Meta:
         db_table = "masters_price_list"
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                name="uniq_price_list_org_name",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
 
 
-class PriceListLine(models.Model):
+class PriceListLine(OrganizationScopedModel):
     """Selling price for one item on one price list (before GST)."""
 
     price_list = models.ForeignKey(
@@ -212,10 +240,10 @@ class PriceListLine(models.Model):
         return f"{self.item.name} @ {self.price} ({self.price_list.name})"
 
 
-class Customer(models.Model):
+class Customer(OrganizationScopedModel):
     """Sales customer. State code drives the GST place of supply."""
 
-    name = models.CharField(max_length=200, unique=True)
+    name = models.CharField(max_length=200)
     gstin = models.CharField(max_length=15, blank=True)
     state_code = models.CharField(max_length=2)
     customer_type = models.CharField(
@@ -241,25 +269,37 @@ class Customer(models.Model):
     class Meta:
         db_table = "masters_customer"
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name"],
+                name="uniq_customer_org_name",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
 
 
-class Setting(models.Model):
+class Setting(OrganizationScopedModel):
     """Key/value business setting (variance tolerance, factory state, ...).
 
     Settings are read through ``masters.services.get_decimal_setting`` so no
     magic numbers are hard-coded in business logic.
     """
 
-    key = models.CharField(max_length=100, unique=True)
+    key = models.CharField(max_length=100)
     value = models.TextField()
     description = models.CharField(max_length=255, blank=True)
 
     class Meta:
         db_table = "masters_setting"
         ordering = ["key"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "key"],
+                name="uniq_setting_org_key",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.key}={self.value}"

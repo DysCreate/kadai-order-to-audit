@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from apps.inventory.models import StockLedger
 from apps.production.models import ProductionRun
+from core.tenancy import OrganizationScopedModel
 
 
 class OverheadScope(models.TextChoices):
@@ -34,7 +35,7 @@ class OverheadCategory(models.TextChoices):
     OTHER = "other", "Other"
 
 
-class OverheadEntry(models.Model):
+class OverheadEntry(OrganizationScopedModel):
     """One overhead amount entered against a run or a calendar month."""
 
     scope = models.CharField(max_length=10, choices=OverheadScope.choices, db_index=True)
@@ -85,7 +86,7 @@ class OverheadEntry(models.Model):
         return f"{self.category} {self.amount} ({target})"
 
 
-class OverheadAllocation(models.Model):
+class OverheadAllocation(OrganizationScopedModel):
     """The share of a monthly pool assigned to one completed run.
 
     ``ledger_entry`` points at the value-only stock ledger row that carried the
